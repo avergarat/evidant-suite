@@ -2031,7 +2031,7 @@ with tab_dash:
                     legend=dict(orientation="h", y=-0.18, font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
                     yaxis=ax(title="Haber Neto (CLP)"),
                     xaxis=ax(title="Modalidad Contractual"))
-                st.plotly_chart(_fc1, use_container_width=True)
+                st.plotly_chart(_fc1)
 
             # ── TABLA 2 + GRÁFICO 2 ────────────────────────────────────────
             st.markdown("---")
@@ -2106,7 +2106,7 @@ with tab_dash:
                     legend=dict(orientation="h", y=-0.32, font=dict(size=11),
                                 bgcolor="rgba(0,0,0,0)",
                                 bordercolor="rgba(255,255,255,.1)", borderwidth=1))
-                st.plotly_chart(_fc2, use_container_width=True)
+                st.plotly_chart(_fc2)
         else:
             st.info("Sin datos de imputación para este Centro de Costo.")
 
@@ -2154,7 +2154,7 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
             legend=dict(orientation="h", y=-0.38, font=dict(size=11),
                         bgcolor="rgba(0,0,0,0)"))
         f1.update_xaxes(tickfont=dict(size=9, color="#475569"))
-        st.plotly_chart(f1, use_container_width=True)
+        st.plotly_chart(f1)
 
     with cg2:
         ep = (df_f.groupby("programa")["haber_neto"].sum()
@@ -2209,7 +2209,7 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
                 bordercolor="rgba(255,255,255,0.12)",
                 borderwidth=1,
                 tracegroupgap=4))
-        st.plotly_chart(f2, use_container_width=True)
+        st.plotly_chart(f2)
 
     st.markdown("### 📈 Evolución Mensual del Gasto")
     ev=(df_f.groupby("periodo").agg(hn=("haber_neto","sum"),thb=("monto_total_haberes","sum"),ds=("descuentos","sum")).reset_index().sort_values("periodo"))
@@ -2234,7 +2234,7 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
         barmode="group",height=380,
         xaxis=ax(title="Período"),yaxis=ax(title="CLP"),
         legend=dict(orientation="h",y=-0.22,font=dict(size=13),bgcolor="rgba(0,0,0,0)"))
-    st.plotly_chart(f3,use_container_width=True)
+    st.plotly_chart(f3)
 
     # ══════════════════════════════════════════════════════════════════════
     # BUSCADOR DE PERSONAS
@@ -2397,7 +2397,7 @@ with tab_det:
             xaxis =ax(title="Modalidad"),  yaxis =ax(title="N° Personas"),
             xaxis2=ax(title="Modalidad"),  yaxis2=ax(title="Haber Neto (CLP)"))
         f4.update_annotations(font_size=12, font_color="#93c5fd")
-        st.plotly_chart(f4, use_container_width=True)
+        st.plotly_chart(f4)
         ta["Costo CLP"]    = ta["costo"].apply(fmt_clp)
         ta["Prom/persona"] = ta.apply(lambda r: fmt_clp(r["costo"]/r["personas"]) if r["personas"]>0 else "—", axis=1)
         st.markdown(
@@ -2428,7 +2428,7 @@ with tab_det:
             legend=dict(orientation="h", y=-0.1, font=dict(size=13),
                         title_text="Modalidad: ", bgcolor="rgba(0,0,0,0)"))
         f5.update_yaxes(autorange="reversed", tickfont=dict(size=11, color="#cbd5e1"))
-        st.plotly_chart(f5, use_container_width=True)
+        st.plotly_chart(f5)
 
     st.markdown("---")
     st.markdown("### 📋 Tabla Dinámica · Haber Neto por Resolución y Tipo de Movimiento")
@@ -2614,7 +2614,7 @@ with tab_det:
         f6.update_yaxes(title_text="Promedio CLP / Persona",
                         gridcolor="rgba(0,0,0,0)",
                         tickfont=dict(size=11), secondary_y=True)
-        st.plotly_chart(f6, use_container_width=True)
+        st.plotly_chart(f6)
     with cj2c:
         cj["Total CLP"]=cj["costo"].apply(fmt_clp); cj["Prom/persona CLP"]=cj["prom"].apply(fmt_clp)
         st.markdown(

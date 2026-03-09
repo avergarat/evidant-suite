@@ -148,13 +148,13 @@ with tab_dash:
             if stats["por_calidad"]:
                 df_cal = pd.DataFrame(stats["por_calidad"]).rename(columns={"CALIDAD_JURIDICA":"Calidad","n":"Contratos"})
                 df_cal = df_cal[df_cal["Calidad"] != ""].sort_values("Contratos", ascending=False)
-                st.plotly_chart(_ev_bar(df_cal["Calidad"], df_cal["Contratos"]), use_container_width=True)
+                st.plotly_chart(_ev_bar(df_cal["Calidad"], df_cal["Contratos"]))
         with col_b:
             st.markdown("**Distribucion por Ley Afecto**")
             if stats["por_ley"]:
                 df_ley = pd.DataFrame(stats["por_ley"]).rename(columns={"LEY_AFECTO":"Ley","n":"Contratos"})
                 df_ley = df_ley[df_ley["Ley"] != ""].sort_values("Contratos", ascending=False)
-                st.plotly_chart(_ev_bar(df_ley["Ley"], df_ley["Contratos"]), use_container_width=True)
+                st.plotly_chart(_ev_bar(df_ley["Ley"], df_ley["Contratos"]))
 
         st.divider()
 
