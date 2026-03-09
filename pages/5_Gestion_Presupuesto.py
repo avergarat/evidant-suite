@@ -2274,11 +2274,14 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
                 _df_bus["nombre"].astype(str).str.lower().str.contains(_q, na=False)
             ]
 
-        _sor1, _sor2 = st.columns([2, 1])
+        _sor1, _sor2, _sor3 = st.columns([2, 1, 1])
         _sor1.caption(f"{len(_df_bus):,} registros encontrados")
         _sort_by = _sor2.selectbox(
             "Ordenar por", ["Haber Neto ↓", "Haber Neto ↑", "Total Haberes ↓", "Nombre A→Z"],
             key="busq_sort", label_visibility="collapsed")
+        _rows_pp = _sor3.selectbox(
+            "Filas por página", [10, 20, 50, 100],
+            index=1, key="busq_rows_pp", label_visibility="collapsed")
 
         if not _df_bus.empty:
             _sort_map = {
@@ -2288,22 +2291,44 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
                 "Nombre A→Z":      ("nombre", True),
             }
             _sc, _sasc = _sort_map.get(_sort_by, ("haber_neto", False))
-            _df_show = (_df_bus[["periodo","run","nombre","planilla_pago","resolucion","programa",
-                                  "tipo_contrato","calidad_juridica",
-                                  "monto_total_haberes","descuentos","haber_neto"]]
-                        .copy()
-                        .sort_values(_sc, ascending=_sasc)
-                        .head(300))
-            _df_show["periodo"]             = _df_show["periodo"].apply(per_label)
-            _df_show["monto_total_haberes"] = _df_show["monto_total_haberes"].apply(fmt_clp)
-            _df_show["descuentos"]          = _df_show["descuentos"].apply(fmt_clp)
-            _df_show["haber_neto"]          = _df_show["haber_neto"].apply(fmt_clp)
-            _df_show.columns = ["Período","RUT","Nombre","Planilla de Pago","CC","Programa",
+            _df_sorted = (_df_bus[["periodo","run","nombre","planilla_pago","resolucion","programa",
+                                   "tipo_contrato","calidad_juridica",
+                                   "monto_total_haberes","descuentos","haber_neto"]]
+                          .copy()
+                          .sort_values(_sc, ascending=_sasc))
+
+            # ── Paginación ───────────────────────────────────────────────────
+            _total_reg  = len(_df_sorted)
+            _total_pags = max(1, -(-_total_reg // _rows_pp))  # ceil division
+            if "busq_pag" not in st.session_state or st.session_state.get("_busq_pag_rows") != _rows_pp:
+                st.session_state["busq_pag"] = 1
+                st.session_state["_busq_pag_rows"] = _rows_pp
+            _pag_actual = st.session_state["busq_pag"]
+
+            _p1, _p2, _p3 = st.columns([1, 3, 1])
+            if _p1.button("◀ Anterior", key="busq_prev", disabled=(_pag_actual <= 1)):
+                st.session_state["busq_pag"] = _pag_actual - 1
+                st.rerun()
+            _p2.markdown(
+                f'<div style="text-align:center;padding:6px 0;color:#b3b3b3;font-size:13px;">'
+                f'Página <b>{_pag_actual}</b> de <b>{_total_pags}</b> '
+                f'· {_total_reg:,} registros</div>',
+                unsafe_allow_html=True)
+            if _p3.button("Siguiente ▶", key="busq_next", disabled=(_pag_actual >= _total_pags)):
+                st.session_state["busq_pag"] = _pag_actual + 1
+                st.rerun()
+
+            _ini = (_pag_actual - 1) * _rows_pp
+            _fin = _ini + _rows_pp
+            _df_page = _df_sorted.iloc[_ini:_fin].copy()
+            _df_page["periodo"]             = _df_page["periodo"].apply(per_label)
+            _df_page["monto_total_haberes"] = _df_page["monto_total_haberes"].apply(fmt_clp)
+            _df_page["descuentos"]          = _df_page["descuentos"].apply(fmt_clp)
+            _df_page["haber_neto"]          = _df_page["haber_neto"].apply(fmt_clp)
+            _df_page.columns = ["Período","RUT","Nombre","Planilla de Pago","CC","Programa",
                                  "Tipo Contrato","Calidad Jurídica",
                                  "Total Haberes","Descuentos","Haber Neto"]
-            st.markdown(ev_design.ev_table_html(_df_show), unsafe_allow_html=True)
-            if len(_df_bus) > 300:
-                st.caption("⚠️ Se muestran los primeros 300 resultados.")
+            st.markdown(ev_design.ev_table_html(_df_page), unsafe_allow_html=True)
             _sc1, _sc2, _sc3 = st.columns(3)
             _sc1.metric("Total Haberes", fmt_clp(_df_bus["monto_total_haberes"].sum()))
             _sc2.metric("Descuentos",    fmt_clp(_df_bus["descuentos"].sum()))
