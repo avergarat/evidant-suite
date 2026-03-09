@@ -1,6 +1,10 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import ttk
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+    from tkinter import ttk
+except Exception:
+    tk = ttk = filedialog = messagebox = None
 import threading
 import re
 import zipfile
@@ -1496,3 +1500,4 @@ class App(tk.Tk):
 
 if __name__ == "__main__":
     App().mainloop()
+
