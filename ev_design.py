@@ -719,6 +719,7 @@ def ev_bar(x_vals, y_vals, fmt_clp=False, height=340):
         margin=dict(t=35, b=90, l=10, r=10),
         height=height,
         xaxis=dict(
+            type="category",
             tickfont=dict(color="#6b6b6b", size=10),
             tickangle=-35,
             showgrid=False,
