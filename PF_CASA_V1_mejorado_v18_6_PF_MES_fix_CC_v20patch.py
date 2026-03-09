@@ -1,15 +1,6 @@
-try:
-    import tkinter as tk
-except Exception:
-    tk = None
-try:
-    from tkinter import filedialog, messagebox
-except Exception:
-    filedialog = messagebox = None
-try:
-    from tkinter import ttk
-except Exception:
-    ttk = None
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from tkinter import ttk
 import threading
 import re
 import zipfile
