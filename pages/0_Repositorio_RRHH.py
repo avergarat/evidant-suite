@@ -13,6 +13,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ev_design
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Repositorio RR.HH. - Evidant", page_icon="D", layout="wide")
 
@@ -181,11 +182,50 @@ with tab_dash:
             col_g, col_t = st.columns([2, 1])
             with col_g:
                 if not df_cc_monto.empty:
-                    st.plotly_chart(
-                        _ev_bar(df_cc_monto["Centro de Costo"], df_cc_monto["Total Haberes CLP"],
-                                fmt_clp=True, height=380),
-                        use_container_width=True,
+                    _cc_labels = [str(v) for v in df_cc_monto["Centro de Costo"]]
+                    _cc_montos  = list(df_cc_monto["Total Haberes CLP"])
+                    _n = len(_cc_labels)
+                    _colors = [
+                        f"rgb({int(74+156*i/max(_n-1,1))},{int(158-101*i/max(_n-1,1))},{int(255-185*i/max(_n-1,1))})"
+                        for i in range(_n)
+                    ]
+                    _text = [f"${v:,.0f}".replace(",", ".") for v in _cc_montos]
+                    _fig_cc = go.Figure(go.Bar(
+                        x=_cc_labels,
+                        y=_cc_montos,
+                        marker=dict(color=_colors, line=dict(width=0)),
+                        text=_text,
+                        textposition="outside",
+                        textfont=dict(size=10, color="#b3b3b3", family="JetBrains Mono"),
+                        cliponaxis=False,
+                    ))
+                    _fig_cc.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#b3b3b3", family="Outfit"),
+                        height=420,
+                        margin=dict(t=35, b=90, l=10, r=10),
+                        xaxis=dict(
+                            type="category",
+                            categoryorder="array",
+                            categoryarray=_cc_labels,
+                            tickfont=dict(color="#b3b3b3", size=11),
+                            tickangle=-35,
+                            showgrid=False,
+                            linecolor="rgba(255,255,255,0.07)",
+                        ),
+                        yaxis=dict(
+                            type="log",
+                            tickvals=[1e4, 1e5, 1e6, 1e7, 1e8, 1e9],
+                            ticktext=["$10K", "$100K", "$1M", "$10M", "$100M", "$1B"],
+                            tickfont=dict(color="#6b6b6b", size=10),
+                            gridcolor="rgba(255,255,255,0.05)",
+                            linecolor="rgba(255,255,255,0.07)",
+                        ),
+                        bargap=0.28,
+                        showlegend=False,
                     )
+                    st.plotly_chart(_fig_cc)
             with col_t:
                 st.markdown(
                     _ev_table_html(
