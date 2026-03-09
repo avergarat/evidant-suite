@@ -2309,6 +2309,41 @@ section[data-testid="stMain"] div[data-testid="stPlotlyChart"] {
             _sc2.metric("Descuentos",    fmt_clp(_df_bus["descuentos"].sum()))
             _sc3.metric("Haber Neto",    fmt_clp(_df_bus["haber_neto"].sum()))
 
+            # ── Botones de descarga ───────────────────────────────────────────
+            _COLS_DL   = ["periodo","run","nombre","planilla_pago","resolucion","programa",
+                          "tipo_contrato","calidad_juridica",
+                          "monto_total_haberes","descuentos","haber_neto"]
+            _COLS_NOMB = ["Período","RUT","Nombre","Planilla de Pago","CC","Programa",
+                          "Tipo Contrato","Calidad Jurídica",
+                          "Total Haberes ($)","Descuentos ($)","Haber Neto ($)"]
+
+            def _to_xlsx(df_raw):
+                _tmp = df_raw[_COLS_DL].copy()
+                _tmp["periodo"] = _tmp["periodo"].apply(per_label)
+                _tmp.columns = _COLS_NOMB
+                _buf = io.BytesIO()
+                _tmp.to_excel(_buf, index=False)
+                _buf.seek(0)
+                return _buf
+
+            _dl1, _dl2 = st.columns(2)
+            _dl1.download_button(
+                f"📥 Descargar filtro actual  ({len(_df_bus):,} registros)",
+                data=_to_xlsx(_df_bus.sort_values(_sc, ascending=_sasc)),
+                file_name="rendiciones_filtrado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dl_bus_filt",
+            )
+            _dl2.download_button(
+                f"📥 Descargar TODAS las rendiciones  ({len(_df_pers):,} registros)",
+                data=_to_xlsx(_df_pers.sort_values("periodo")),
+                file_name="rendiciones_completo.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dl_bus_all",
+            )
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ANÁLISIS DETALLADO
 # ══════════════════════════════════════════════════════════════════════════════

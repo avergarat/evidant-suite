@@ -165,9 +165,11 @@ with tab_dash:
             df_all = pd.DataFrame(todos_activos)
             df_all["_monto"] = df_all.get("TOTAL_HABER", pd.Series([0]*len(df_all))).apply(parse_monto)
 
-            # Grafico por CC ordenado por monto
+            # Grafico por CC ordenado por monto (str para eje categórico en Plotly)
             df_cc_monto = (df_all[df_all["CENTRO_DE_COSTO"].astype(str).str.strip() != ""]
-                           .groupby("CENTRO_DE_COSTO")["_monto"].sum()
+                           .copy()
+                           .assign(_cc=lambda d: d["CENTRO_DE_COSTO"].astype(str).str.strip())
+                           .groupby("_cc")["_monto"].sum()
                            .sort_values(ascending=False)
                            .head(20)
                            .reset_index())
