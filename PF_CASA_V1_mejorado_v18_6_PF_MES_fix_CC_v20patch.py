@@ -1088,7 +1088,7 @@ class ScrollableFrame:
 # =========================
 # Tkinter App
 # =========================
-class App(tk.Tk):
+class App:
     def __init__(self):
         super().__init__()
         self.title("Paso 1-7 + Programa Financiero (SIGFE x CC) -> salida con PF_MES_xx + PF_ANUAL")
