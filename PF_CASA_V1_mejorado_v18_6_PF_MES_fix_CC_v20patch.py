@@ -1037,7 +1037,7 @@ def process_steps_1_to_4(
 # =========================
 # UI: Scrollable container
 # =========================
-class ScrollableFrame(ttk.Frame):
+class ScrollableFrame:
     def __init__(self, parent):
         super().__init__(parent)
 
