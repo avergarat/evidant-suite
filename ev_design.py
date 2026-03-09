@@ -597,11 +597,136 @@ hr {
 .ev-anim3 { animation:fadeUp .45s ease .2s both; }
 .ev-anim4 { animation:fadeUp .45s ease .3s both; }
 
-/* Responsive */
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE — Mobile & Tablet
+══════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤ 1024px) ── */
+@media (max-width:1024px){
+  .ev-page-title  { font-size:1.6rem; }
+  .ev-kpi-grid    { grid-template-columns:repeat(2,1fr) !important; }
+  .ev-kpi-value   { font-size:1.2rem !important; }
+}
+
+/* ── Mobile (≤ 768px) ── */
 @media (max-width:768px){
-  .ev-page-header{padding:1.5rem 1rem;}
-  .ev-page-title{font-size:1.5rem;}
-  .ev-content{padding:1.2rem 1rem;}
+
+  /* Layout base */
+  .ev-page-header { padding:1rem .8rem !important; }
+  .ev-page-title  { font-size:1.25rem !important; line-height:1.3 !important; }
+  .ev-page-sub    { font-size:.75rem !important; }
+  .ev-content     { padding:.8rem .6rem !important; }
+  .section-hdr    { padding:1rem .8rem !important; font-size:1rem !important; }
+
+  /* ── Navbar: scroll horizontal, no overflow ── */
+  [data-testid="stHorizontalBlock"]:has([data-testid="stPageLink"]) {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    gap: 2px !important;
+    min-height: 50px !important;
+    padding: 0 4px !important;
+  }
+  [data-testid="stHorizontalBlock"]:has([data-testid="stPageLink"])::-webkit-scrollbar {
+    display: none !important;
+  }
+  [data-testid="stHorizontalBlock"]:has([data-testid="stPageLink"]) [data-testid="stPageLink"] a {
+    font-size: 11px !important;
+    padding: 5px 9px !important;
+    white-space: nowrap !important;
+  }
+
+  /* ── Columnas: stack vertical (excepto navbar) ── */
+  [data-testid="stHorizontalBlock"]:not(:has([data-testid="stPageLink"])) {
+    flex-direction: column !important;
+    flex-wrap: wrap !important;
+    gap: 0 !important;
+  }
+  [data-testid="stHorizontalBlock"]:not(:has([data-testid="stPageLink"])) > [data-testid="column"] {
+    width: 100% !important;
+    min-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+
+  /* ── Métricas ── */
+  [data-testid="metric-container"]  { min-width:0 !important; }
+  [data-testid="stMetricValue"]     { font-size:1.1rem !important; }
+  [data-testid="stMetricLabel"]     { font-size:.7rem !important; }
+
+  /* ── KPI grid ── */
+  .ev-kpi-grid  { grid-template-columns:repeat(2,1fr) !important; gap:.5rem !important; }
+  .ev-kpi-value { font-size:1rem !important; }
+  .ev-kpi-lbl   { font-size:.68rem !important; }
+
+  /* ── Tabs: scroll horizontal ── */
+  [data-testid="stTabs"] > div:first-child {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+  }
+  [data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display:none !important; }
+  [data-testid="stTabs"] button {
+    white-space: nowrap !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ── Tablas HTML: scroll horizontal ── */
+  [data-testid="stMarkdownContainer"] > div[style*="border-radius:12px"],
+  [data-testid="stMarkdownContainer"] > div[style*="border-radius: 12px"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100vw !important;
+  }
+  [data-testid="stMarkdownContainer"] table { min-width: 480px; }
+
+  /* ── DataFrames ── */
+  [data-testid="stDataFrame"] > div { overflow-x:auto !important; -webkit-overflow-scrolling:touch !important; }
+
+  /* ── Plotly: no desborde ── */
+  [data-testid="stPlotlyChart"] { overflow-x:auto !important; max-width:100vw !important; }
+  [data-testid="stPlotlyChart"] > div { min-width:0 !important; }
+
+  /* ── Botones full-width ── */
+  [data-testid="stDownloadButton"] button { width:100% !important; font-size:13px !important; }
+  [data-testid="stButton"] > button       { font-size:13px !important; }
+
+  /* ── Inputs — evitar zoom iOS (min 16px) ── */
+  [data-testid="stTextInput"]  input  { font-size:16px !important; }
+  [data-testid="stSelectbox"]  select { font-size:16px !important; }
+  [data-testid="stNumberInput"] input { font-size:16px !important; }
+
+  /* ── Texto general más legible ── */
+  [data-testid="stMarkdownContainer"] p  { font-size:.9rem !important; line-height:1.6 !important; }
+  [data-testid="stMarkdownContainer"] h3 { font-size:1.1rem !important; }
+  [data-testid="stMarkdownContainer"] h4 { font-size:1rem !important; }
+
+  /* ── Status y progress ── */
+  [data-testid="stStatus"]       { font-size:13px !important; }
+  [data-testid="stProgress"] > div { height:6px !important; }
+
+  /* ── Expander ── */
+  [data-testid="stExpander"] summary { font-size:13px !important; }
+
+  /* ── File uploader ── */
+  [data-testid="stFileUploader"] { font-size:13px !important; }
+  [data-testid="stFileUploader"] section { padding:.6rem !important; }
+}
+
+/* ── Small mobile (≤ 480px) ── */
+@media (max-width:480px){
+  .ev-page-title { font-size:1rem !important; }
+  .ev-kpi-grid   { grid-template-columns:1fr !important; }
+  [data-testid="stHorizontalBlock"]:has([data-testid="stPageLink"]) [data-testid="stPageLink"] a {
+    font-size: 10px !important;
+    padding: 4px 7px !important;
+  }
+  [data-testid="stTabs"] button { font-size:11px !important; padding:5px 8px !important; }
+  [data-testid="stMetricValue"] { font-size:.95rem !important; }
 }
 
 /* ══════════════════════════════════════════════════════
