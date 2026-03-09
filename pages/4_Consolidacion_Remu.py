@@ -636,12 +636,13 @@ if st.button("⚡  CONSOLIDAR Y HOMOLOGAR", type="primary", use_container_width=
         # ── Paso 1: Motor original → archivo crudo ────────────────────────────
           _pbar_c.progress(1/7, text="Paso 1/7 — Consolidando hojas...")
           with st.spinner("Paso 1/7 — Consolidando hojas..."):
-            consolidate_by_header_triplet(
-                input_path=src_path,
-                output_path=raw_out_path,
-                sheet_names=selected_sheets,
+            _cons_result = consolidate_by_header_triplet(
+                file_bytes,
+                selected_sheets,
                 add_source_col=add_source,
             )
+            with open(raw_out_path, "wb") as _f:
+                _f.write(_cons_result.read())
 
         # ── Paso 2: Leer consolidado crudo (encabezado 3 filas + datos) ─────────
           _pbar_c.progress(2/7, text="Paso 2/7 — Leyendo y homologando...")
