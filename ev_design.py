@@ -988,7 +988,7 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
 
     with c[12]:  # Imágenes — Liquidaciones Accesorias
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
-        st.page_link("pages/7_Liquidaciones_Accesorias.py", label="Liq. Accesorias")
+        st.page_link("pages/7_Dotacion.py", label="Dotación")
 
     with c[13]:  # Separador final
         st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)

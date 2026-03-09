@@ -520,23 +520,23 @@ with img1:
 
 with img2:
     st.markdown(
-        '<div class="module-card module-card-top" style="--accent:#00d4ff;min-height:320px;">'
-        '<div style="font-size:1.9rem;">📋</div>'
-        '<div class="module-title">Liquidaciones Accesorias</div>'
+        '<div class="module-card module-card-top" style="--accent:#1db954;min-height:320px;">'
+        '<div style="font-size:1.9rem;">👥</div>'
+        '<div class="module-title">Gestión de Dotación</div>'
         '<div style="display:flex;gap:.2rem;flex-wrap:wrap;">'
-        '<span class="module-tag">SIRH Automático</span>'
-        '<span class="module-tag">Lote por Folios</span>'
-        '<span class="module-tag">PDF por Folio</span>'
-        '<span class="module-tag">Log en Tiempo Real</span>'
+        '<span class="module-tag">SIRH Export</span>'
+        '<span class="module-tag">Contrato Vigente</span>'
+        '<span class="module-tag">Alertas SIRH</span>'
+        '<span class="module-tag">Repositorio Actualizable</span>'
         '</div>'
         '<div class="module-desc">'
-        'Automatiza la descarga de liquidaciones accesorias desde SIRH procesando '
-        'un lote de folios definidos en Excel. Genera un PDF por folio en la carpeta '
-        'de salida con trazabilidad completa por log.</div>'
+        'Repositorio persistente de dotación vigente. Detecta el último contrato '
+        'activo por funcionario, controla bloques de horas y alerta sobre '
+        'inconsistencias en Título para corrección en SIRH.</div>'
         '</div>',
         unsafe_allow_html=True,
     )
-    st.page_link("pages/7_Liquidaciones_Accesorias.py", label="Abrir Liq. Accesorias →", use_container_width=True)
+    st.page_link("pages/7_Dotacion.py", label="Abrir Dotación →", use_container_width=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
