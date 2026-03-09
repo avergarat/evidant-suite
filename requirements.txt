@@ -3,3 +3,9 @@ openpyxl
 numpy
 xlrd
 plotly
+python-docx
+Pillow
+pypdf
+kaleido
+pytesseract
+PyPDF2
