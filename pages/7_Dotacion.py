@@ -244,6 +244,43 @@ def _meta() -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# UTILIDADES DE FORMATO
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SIN_TERMINO_STRS = {"2999-12-31", "2999-12-31 00:00:00", "00/00/0000"}
+
+def _fmt_fecha_lat(v) -> str:
+    """Convierte cualquier valor fecha a dd/mm/aaaa. '00/00/0000' → 'Sin Término'."""
+    s = str(v).strip()
+    if s in _SIN_TERMINO_STRS:
+        return "Sin Término"
+    if s in _NULL_STRS:
+        return "—"
+    # ya viene en formato dd/mm/aaaa
+    if len(s) == 10 and s[2] == "/" and s[5] == "/":
+        return s
+    try:
+        return pd.to_datetime(s).strftime("%d/%m/%Y")
+    except Exception:
+        return s
+
+
+def _fmt_lat_dates(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+    """Devuelve copia del df con las columnas de fecha formateadas dd/mm/aaaa."""
+    df = df.copy()
+    for col in cols:
+        if col in df.columns:
+            df[col] = df[col].apply(_fmt_fecha_lat)
+    return df
+
+
+_DATE_COLS_ALL = [
+    COL_INICIO, COL_TERMINO, COL_ALEJ,
+    COL_INI_AUSEN, COL_TER_AUSEN,
+]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # LÓGICA DE PROCESAMIENTO
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -598,8 +635,9 @@ with tab_repo:
         _CT_HIGHLIGHT = [c for c in [COL_INICIO, COL_TERMINO] if c in df_filt_ct.columns]
 
         _ini_ct = (pag_ct - 1) * rows_pp_ct
+        _slice_ct = _fmt_lat_dates(df_filt_ct.iloc[_ini_ct:_ini_ct + rows_pp_ct], _DATE_COLS_ALL)
         st.markdown(ev_design.ev_table_html(
-            df_filt_ct.iloc[_ini_ct:_ini_ct + rows_pp_ct],
+            _slice_ct,
             highlight_cols=_CT_HIGHLIGHT,
         ), unsafe_allow_html=True)
 
@@ -668,8 +706,11 @@ with tab_repo:
             if rn3.button("Siguiente ▶", key="re_next", disabled=(pag_re >= total_pag_re)):
                 st.session_state["re_pag"] = pag_re + 1; st.rerun()
 
+            _RE_HIGHLIGHT = [c for c in [COL_INICIO, COL_TERMINO, COL_INI_AUSEN, COL_TER_AUSEN]
+                             if c in df_filt_re.columns]
             _ini_re = (pag_re - 1) * rows_pp_re
-            st.markdown(ev_design.ev_table_html(df_filt_re.iloc[_ini_re:_ini_re + rows_pp_re]),
+            _slice_re = _fmt_lat_dates(df_filt_re.iloc[_ini_re:_ini_re + rows_pp_re], _DATE_COLS_ALL)
+            st.markdown(ev_design.ev_table_html(_slice_re, highlight_cols=_RE_HIGHLIGHT),
                         unsafe_allow_html=True)
 
             st.markdown("---")
