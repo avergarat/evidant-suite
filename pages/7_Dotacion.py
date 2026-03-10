@@ -65,19 +65,24 @@ def _turso_query(sql: str) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES — nombres de columnas SIRH
 # ══════════════════════════════════════════════════════════════════════════════
-COL_RUT     = "Rut"
-COL_DV      = "Dv"
-COL_NOMBRE  = "Nombre Funcionario"
-COL_CORREL  = "Correlativo"
-COL_CALIDAD = "Descripción Calidad Jurídica"
-COL_INICIO  = "Fecha Inicio Contrato"
-COL_TERMINO = "Fecha Término Contrato"
-COL_ALEJ    = "Fecha Alejamiento"
-COL_HORAS   = "Número horas"
-COL_TITULO  = "Título"
-COL_PLANTA  = "Correl. Planta"
-COL_LEY     = "Ley"
-COL_CC      = "C. Costo"
+COL_RUT          = "Rut"
+COL_DV           = "Dv"
+COL_NOMBRE       = "Nombre Funcionario"
+COL_CORREL       = "Correlativo"
+COL_CALIDAD      = "Descripción Calidad Jurídica"
+COL_INICIO       = "Fecha Inicio Contrato"
+COL_TERMINO      = "Fecha Término Contrato"
+COL_ALEJ         = "Fecha Alejamiento"
+COL_HORAS        = "Número horas"
+COL_TITULO       = "Título"
+COL_PLANTA       = "Correl. Planta"
+COL_LEY          = "Ley"
+COL_CC           = "C. Costo"
+COL_RUT_REEMPL   = "Rut del Reemplazado"
+COL_NOM_REEMPL   = "Nombre del Reemplazado"
+COL_MOTIVO_REEMPL= "Motivo del Reemplazo"
+COL_INI_AUSEN    = "Fecha Inicio Ausentismo"
+COL_TER_AUSEN    = "Fecha Término Ausentismo"
 
 _NULL_STRS  = {"00/00/0000", "", "nan", "nat", "none", "s/d", "sd", "NaT"}
 _MAX_DATE   = pd.Timestamp("2999-12-31")
@@ -517,72 +522,152 @@ with tab_dash:
 with tab_repo:
     st.markdown("### 📋 Repositorio — Contratos Vigentes")
 
-    # Filtros
-    f1, f2, f3, f4 = st.columns([1.2, 2, 1.8, 1.5])
-    filt_rut = f1.text_input("RUT", placeholder="ej: 12345678", key="dot_frut")
-    filt_nom = f2.text_input("Nombre Funcionario", placeholder="Apellido o nombre", key="dot_fnom")
+    # Separar contratos/titulares vs reemplazos
+    _tiene_reempl = COL_RUT_REEMPL in df_dot.columns
+    if _tiene_reempl:
+        _mask_reempl   = df_dot[COL_RUT_REEMPL].astype(str).str.strip().replace(
+            {"nan": "", "none": "", "NaT": "", "None": ""}).ne("")
+        df_contratos   = df_dot[~_mask_reempl].copy()
+        df_reemplazos  = df_dot[_mask_reempl].copy()
+    else:
+        df_contratos  = df_dot.copy()
+        df_reemplazos = pd.DataFrame()
 
-    cal_opts = ["(Todas)"] + (sorted(df_dot[COL_CALIDAD].dropna().unique().tolist())
-                               if COL_CALIDAD in df_dot.columns else [])
-    filt_cal = f3.selectbox("Calidad Jurídica", cal_opts, key="dot_fcal")
+    sub_ct, sub_re = st.tabs([
+        f"👔 Contratos y Titulares de Planta  ({len(df_contratos):,})",
+        f"🔄 Reemplazos  ({len(df_reemplazos):,})",
+    ])
 
-    plt_vals = sorted([v for v in df_dot[COL_PLANTA].unique()
-                       if str(v).strip() not in _NULL_STRS]) if COL_PLANTA in df_dot.columns else []
-    plt_opts = ["(Todas)"] + plt_vals
-    filt_plt = f4.selectbox("Correl. Planta", plt_opts, key="dot_fplt")
+    # ── SUB-TAB 1: Contratos y Titulares ──────────────────────────────────────
+    with sub_ct:
+        f1, f2, f3, f4 = st.columns([1.2, 2, 1.8, 1.5])
+        filt_rut = f1.text_input("RUT", placeholder="ej: 12345678", key="ct_frut")
+        filt_nom = f2.text_input("Nombre Funcionario", placeholder="Apellido o nombre", key="ct_fnom")
 
-    # Aplicar filtros
-    df_filt = df_dot.copy()
-    if filt_rut.strip():
-        df_filt = df_filt[df_filt[COL_RUT].astype(str).str.contains(filt_rut.strip(), na=False)]
-    if filt_nom.strip():
-        df_filt = df_filt[df_filt[COL_NOMBRE].astype(str).str.upper()
-                          .str.contains(filt_nom.strip().upper(), na=False)]
-    if filt_cal != "(Todas)":
-        df_filt = df_filt[df_filt[COL_CALIDAD] == filt_cal]
-    if filt_plt != "(Todas)":
-        df_filt = df_filt[df_filt[COL_PLANTA] == filt_plt]
+        cal_opts = ["(Todas)"] + (sorted(df_contratos[COL_CALIDAD].dropna().unique().tolist())
+                                   if COL_CALIDAD in df_contratos.columns else [])
+        filt_cal = f3.selectbox("Calidad Jurídica", cal_opts, key="ct_fcal")
 
-    # Reset página si cambiaron filtros
-    _filt_key = f"{filt_rut}|{filt_nom}|{filt_cal}|{filt_plt}"
-    if st.session_state.get("_dot_filt_prev") != _filt_key:
-        st.session_state["dot_pag"] = 1
-        st.session_state["_dot_filt_prev"] = _filt_key
+        plt_vals = sorted([v for v in df_contratos[COL_PLANTA].unique()
+                           if str(v).strip() not in _NULL_STRS]) if COL_PLANTA in df_contratos.columns else []
+        filt_plt = f4.selectbox("Correl. Planta", ["(Todas)"] + plt_vals, key="ct_fplt")
 
-    # Paginación
-    p1, p2, p3 = st.columns([3, 1, 1])
-    p1.caption(f"{len(df_filt):,} registros encontrados")
-    rows_pp   = p2.selectbox("Filas", [10, 20, 50, 100], index=1,
-                              key="dot_rpp", label_visibility="collapsed")
-    total_pag = max(1, -(-len(df_filt) // rows_pp))
-    pag       = st.session_state.get("dot_pag", 1)
+        df_filt_ct = df_contratos.copy()
+        if filt_rut.strip():
+            df_filt_ct = df_filt_ct[df_filt_ct[COL_RUT].astype(str).str.contains(filt_rut.strip(), na=False)]
+        if filt_nom.strip():
+            df_filt_ct = df_filt_ct[df_filt_ct[COL_NOMBRE].astype(str).str.upper()
+                                    .str.contains(filt_nom.strip().upper(), na=False)]
+        if filt_cal != "(Todas)":
+            df_filt_ct = df_filt_ct[df_filt_ct[COL_CALIDAD] == filt_cal]
+        if filt_plt != "(Todas)":
+            df_filt_ct = df_filt_ct[df_filt_ct[COL_PLANTA] == filt_plt]
 
-    nav1, nav2, nav3 = st.columns([1, 3, 1])
-    if nav1.button("◀ Anterior", key="dot_prev", disabled=(pag <= 1)):
-        st.session_state["dot_pag"] = pag - 1; st.rerun()
-    nav2.markdown(
-        f'<div style="text-align:center;padding:6px 0;color:#b3b3b3;font-size:13px;">'
-        f'Página <b>{pag}</b> de <b>{total_pag}</b> · {len(df_filt):,} registros</div>',
-        unsafe_allow_html=True)
-    if nav3.button("Siguiente ▶", key="dot_next", disabled=(pag >= total_pag)):
-        st.session_state["dot_pag"] = pag + 1; st.rerun()
+        _fk_ct = f"{filt_rut}|{filt_nom}|{filt_cal}|{filt_plt}"
+        if st.session_state.get("_ct_filt_prev") != _fk_ct:
+            st.session_state["ct_pag"] = 1
+            st.session_state["_ct_filt_prev"] = _fk_ct
 
-    _ini = (pag - 1) * rows_pp
-    st.markdown(ev_design.ev_table_html(df_filt.iloc[_ini:_ini + rows_pp]), unsafe_allow_html=True)
+        p1, p2, _ = st.columns([3, 1, 1])
+        p1.caption(f"{len(df_filt_ct):,} registros encontrados")
+        rows_pp_ct = p2.selectbox("Filas", [10, 20, 50, 100], index=1,
+                                   key="ct_rpp", label_visibility="collapsed")
+        total_pag_ct = max(1, -(-len(df_filt_ct) // rows_pp_ct))
+        pag_ct = st.session_state.get("ct_pag", 1)
 
-    # Descarga
-    st.markdown("---")
-    dl_buf = io.BytesIO()
-    df_filt.to_excel(dl_buf, index=False)
-    dl_buf.seek(0)
-    st.download_button(
-        f"📥 Descargar filtro actual  ({len(df_filt):,} registros)",
-        data=dl_buf,
-        file_name="dotacion_vigente.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        key="dot_dl",
-    )
+        n1, n2, n3 = st.columns([1, 3, 1])
+        if n1.button("◀ Anterior", key="ct_prev", disabled=(pag_ct <= 1)):
+            st.session_state["ct_pag"] = pag_ct - 1; st.rerun()
+        n2.markdown(
+            f'<div style="text-align:center;padding:6px 0;color:#b3b3b3;font-size:13px;">'
+            f'Página <b>{pag_ct}</b> de <b>{total_pag_ct}</b> · {len(df_filt_ct):,} registros</div>',
+            unsafe_allow_html=True)
+        if n3.button("Siguiente ▶", key="ct_next", disabled=(pag_ct >= total_pag_ct)):
+            st.session_state["ct_pag"] = pag_ct + 1; st.rerun()
+
+        _ini_ct = (pag_ct - 1) * rows_pp_ct
+        st.markdown(ev_design.ev_table_html(df_filt_ct.iloc[_ini_ct:_ini_ct + rows_pp_ct]),
+                    unsafe_allow_html=True)
+
+        st.markdown("---")
+        dl_ct = io.BytesIO()
+        df_filt_ct.to_excel(dl_ct, index=False)
+        dl_ct.seek(0)
+        st.download_button(
+            f"📥 Descargar Contratos y Titulares  ({len(df_filt_ct):,} registros)",
+            data=dl_ct, file_name="contratos_titulares.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True, key="ct_dl",
+        )
+
+    # ── SUB-TAB 2: Reemplazos ─────────────────────────────────────────────────
+    with sub_re:
+        if df_reemplazos.empty:
+            st.info("No se encontraron contratos de reemplazo en el repositorio "
+                    "(columna **'Rut del Reemplazado'** vacía en todos los registros).")
+        else:
+            r1, r2, r3 = st.columns([1.2, 2, 2])
+            rfilt_rut     = r1.text_input("RUT del Reemplazante", placeholder="ej: 12345678", key="re_frut")
+            rfilt_nom     = r2.text_input("Nombre Reemplazante",  placeholder="Apellido o nombre", key="re_fnom")
+            rfilt_rut_ree = r3.text_input("RUT del Reemplazado",  placeholder="ej: 12345678", key="re_frut2")
+
+            df_filt_re = df_reemplazos.copy()
+            if rfilt_rut.strip():
+                df_filt_re = df_filt_re[df_filt_re[COL_RUT].astype(str)
+                                        .str.contains(rfilt_rut.strip(), na=False)]
+            if rfilt_nom.strip():
+                df_filt_re = df_filt_re[df_filt_re[COL_NOMBRE].astype(str).str.upper()
+                                        .str.contains(rfilt_nom.strip().upper(), na=False)]
+            if rfilt_rut_ree.strip():
+                df_filt_re = df_filt_re[df_filt_re[COL_RUT_REEMPL].astype(str)
+                                        .str.contains(rfilt_rut_ree.strip(), na=False)]
+
+            _fk_re = f"{rfilt_rut}|{rfilt_nom}|{rfilt_rut_ree}"
+            if st.session_state.get("_re_filt_prev") != _fk_re:
+                st.session_state["re_pag"] = 1
+                st.session_state["_re_filt_prev"] = _fk_re
+
+            # Mostrar columnas prioritarias de reemplazo al inicio
+            _re_priority = [c for c in [
+                COL_RUT, COL_DV, COL_NOMBRE, COL_CALIDAD,
+                COL_RUT_REEMPL, COL_NOM_REEMPL, COL_MOTIVO_REEMPL,
+                COL_INI_AUSEN, COL_TER_AUSEN,
+                COL_INICIO, COL_TERMINO,
+            ] if c in df_filt_re.columns]
+            _re_rest   = [c for c in df_filt_re.columns if c not in _re_priority]
+            df_filt_re = df_filt_re[_re_priority + _re_rest]
+
+            rp1, rp2, _ = st.columns([3, 1, 1])
+            rp1.caption(f"{len(df_filt_re):,} registros encontrados")
+            rows_pp_re = rp2.selectbox("Filas", [10, 20, 50, 100], index=1,
+                                        key="re_rpp", label_visibility="collapsed")
+            total_pag_re = max(1, -(-len(df_filt_re) // rows_pp_re))
+            pag_re = st.session_state.get("re_pag", 1)
+
+            rn1, rn2, rn3 = st.columns([1, 3, 1])
+            if rn1.button("◀ Anterior", key="re_prev", disabled=(pag_re <= 1)):
+                st.session_state["re_pag"] = pag_re - 1; st.rerun()
+            rn2.markdown(
+                f'<div style="text-align:center;padding:6px 0;color:#b3b3b3;font-size:13px;">'
+                f'Página <b>{pag_re}</b> de <b>{total_pag_re}</b> · {len(df_filt_re):,} registros</div>',
+                unsafe_allow_html=True)
+            if rn3.button("Siguiente ▶", key="re_next", disabled=(pag_re >= total_pag_re)):
+                st.session_state["re_pag"] = pag_re + 1; st.rerun()
+
+            _ini_re = (pag_re - 1) * rows_pp_re
+            st.markdown(ev_design.ev_table_html(df_filt_re.iloc[_ini_re:_ini_re + rows_pp_re]),
+                        unsafe_allow_html=True)
+
+            st.markdown("---")
+            dl_re = io.BytesIO()
+            df_filt_re.to_excel(dl_re, index=False)
+            dl_re.seek(0)
+            st.download_button(
+                f"📥 Descargar Reemplazos  ({len(df_filt_re):,} registros)",
+                data=dl_re, file_name="reemplazos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key="re_dl",
+            )
 
 # ─── TAB ALERTAS ─────────────────────────────────────────────────────────────
 with tab_alertas:
