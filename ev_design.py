@@ -867,21 +867,33 @@ def ev_bar(x_vals, y_vals, fmt_clp=False, height=340):
     return fig
 
 
-def ev_table_html(df, fmt_clp_cols=None):
+def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
     """Renderiza un DataFrame como tabla HTML con tema oscuro Spotify.
     Uso: st.markdown(ev_design.ev_table_html(df), unsafe_allow_html=True)
     fmt_clp_cols: lista de columnas numéricas a formatear como $ 1.234.567
+    highlight_cols: lista de columnas a destacar con fondo amarillo
     """
-    fmt_clp_cols = fmt_clp_cols or []
+    fmt_clp_cols  = fmt_clp_cols  or []
+    highlight_cols = highlight_cols or []
 
-    th = "".join(
-        f'<th style="padding:8px 14px;text-align:left;'
-        f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:600;'
-        f'letter-spacing:1.5px;text-transform:uppercase;color:#535353;'
-        f'border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap;">'
-        f'{col}</th>'
-        for col in df.columns
-    )
+    def _th_style(col):
+        if col in highlight_cols:
+            return (
+                f'<th style="padding:8px 14px;text-align:left;'
+                f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;'
+                f'letter-spacing:1.5px;text-transform:uppercase;color:#1a1a1a;'
+                f'background:#f5c518;border-bottom:1px solid rgba(255,255,255,.07);'
+                f'white-space:nowrap;">{col}</th>'
+            )
+        return (
+            f'<th style="padding:8px 14px;text-align:left;'
+            f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:600;'
+            f'letter-spacing:1.5px;text-transform:uppercase;color:#535353;'
+            f'border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap;">'
+            f'{col}</th>'
+        )
+
+    th = "".join(_th_style(col) for col in df.columns)
     rows = ""
     for i, (_, row) in enumerate(df.iterrows()):
         bg = "rgba(255,255,255,.025)" if i % 2 == 0 else "transparent"
@@ -892,12 +904,21 @@ def ev_table_html(df, fmt_clp_cols=None):
                 val_str = f"$ {val:,.0f}".replace(",", ".")
             else:
                 val_str = str(val) if val is not None else "—"
-            cells += (
-                f'<td style="padding:7px 14px;font-size:12px;'
-                f'font-family:Outfit,sans-serif;color:#b3b3b3;'
-                f'border-bottom:1px solid rgba(255,255,255,.04);">'
-                f'{val_str}</td>'
-            )
+            if col in highlight_cols:
+                cells += (
+                    f'<td style="padding:7px 14px;font-size:12px;'
+                    f'font-family:Outfit,sans-serif;color:#1a1a1a;font-weight:600;'
+                    f'background:rgba(245,197,24,0.15);'
+                    f'border-bottom:1px solid rgba(255,255,255,.04);">'
+                    f'{val_str}</td>'
+                )
+            else:
+                cells += (
+                    f'<td style="padding:7px 14px;font-size:12px;'
+                    f'font-family:Outfit,sans-serif;color:#b3b3b3;'
+                    f'border-bottom:1px solid rgba(255,255,255,.04);">'
+                    f'{val_str}</td>'
+                )
         rows += f'<tr style="background:{bg};">{cells}</tr>'
 
     return (

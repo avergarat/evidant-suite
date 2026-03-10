@@ -585,9 +585,23 @@ with tab_repo:
         if n3.button("Siguiente ▶", key="ct_next", disabled=(pag_ct >= total_pag_ct)):
             st.session_state["ct_pag"] = pag_ct + 1; st.rerun()
 
+        # Reordenar columnas: prioritarias primero
+        _CT_PRIORITY = [c for c in [
+            COL_RUT, COL_DV, COL_NOMBRE,
+            "Descripción Planta", COL_CALIDAD, "Grado", COL_LEY, COL_HORAS,
+            "Antigüedad en nivel (Años-meses-días)", "Descripción Unidad 2",
+            COL_TITULO, COL_INICIO, COL_TERMINO, COL_ALEJ, COL_PLANTA,
+        ] if c in df_filt_ct.columns]
+        _CT_REST = [c for c in df_filt_ct.columns if c not in _CT_PRIORITY]
+        df_filt_ct = df_filt_ct[_CT_PRIORITY + _CT_REST]
+
+        _CT_HIGHLIGHT = [c for c in [COL_INICIO, COL_TERMINO] if c in df_filt_ct.columns]
+
         _ini_ct = (pag_ct - 1) * rows_pp_ct
-        st.markdown(ev_design.ev_table_html(df_filt_ct.iloc[_ini_ct:_ini_ct + rows_pp_ct]),
-                    unsafe_allow_html=True)
+        st.markdown(ev_design.ev_table_html(
+            df_filt_ct.iloc[_ini_ct:_ini_ct + rows_pp_ct],
+            highlight_cols=_CT_HIGHLIGHT,
+        ), unsafe_allow_html=True)
 
         st.markdown("---")
         dl_ct = io.BytesIO()
