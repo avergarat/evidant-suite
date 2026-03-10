@@ -881,8 +881,8 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
             return (
                 f'<th style="padding:8px 14px;text-align:left;'
                 f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;'
-                f'letter-spacing:1.5px;text-transform:uppercase;color:#1a1a1a;'
-                f'background:#f5c518;border-bottom:1px solid rgba(255,255,255,.07);'
+                f'letter-spacing:1.5px;text-transform:uppercase;color:#ffffff;'
+                f'background:#1a6bb5;border-bottom:1px solid rgba(255,255,255,.07);'
                 f'white-space:nowrap;">{col}</th>'
             )
         return (
@@ -907,8 +907,8 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
             if col in highlight_cols:
                 cells += (
                     f'<td style="padding:7px 14px;font-size:12px;'
-                    f'font-family:Outfit,sans-serif;color:#1a1a1a;font-weight:600;'
-                    f'background:rgba(245,197,24,0.15);'
+                    f'font-family:Outfit,sans-serif;color:#ffffff;font-weight:600;'
+                    f'background:rgba(26,107,181,0.20);'
                     f'border-bottom:1px solid rgba(255,255,255,.04);">'
                     f'{val_str}</td>'
                 )
