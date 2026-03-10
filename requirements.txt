@@ -9,3 +9,5 @@ pypdf
 kaleido
 pytesseract
 PyPDF2
+
+pdfplumber
