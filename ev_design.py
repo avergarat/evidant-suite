@@ -876,16 +876,17 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
     fmt_clp_cols  = fmt_clp_cols  or []
     highlight_cols = highlight_cols or []
 
-    # Estilo base de encabezado: sin nowrap → se ajusta al ancho del contenido
+    # Encabezado: mínimo 70px, wrappea si el header es más ancho que los datos
     _TH_BASE = (
-        "padding:8px 10px;text-align:left;"
+        "padding:8px 12px;text-align:left;"
         "font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;"
         "letter-spacing:1.2px;text-transform:uppercase;"
         "white-space:normal;word-break:break-word;vertical-align:bottom;"
+        "min-width:70px;"
         "border-bottom:1px solid rgba(255,255,255,.07);"
     )
     _TD_BASE = (
-        "padding:6px 10px;font-size:12px;"
+        "padding:7px 12px;font-size:12px;"
         "font-family:Outfit,sans-serif;"
         "white-space:nowrap;"
         "border-bottom:1px solid rgba(255,255,255,.04);"
