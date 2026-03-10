@@ -260,37 +260,42 @@ def _parse_inicio(v):
         return pd.NaT
 
 
-def _ultimo_anio_grupo(grp: pd.DataFrame) -> int:
+def _detectar_anio_referencia(df: pd.DataFrame) -> int:
     """
-    Determina el último año de actividad contractual de un grupo (Rut, Correlativo).
+    Detecta el año de vigencia de referencia a partir del archivo SIRH:
+    1. Toma el máximo año de Fecha Término Contrato, excluyendo 00/00/0000.
+    2. Si solo hay términos indefinidos (titulares), usa el máximo año de
+       Fecha Inicio Contrato.
+    3. Fallback: año actual.
 
-    · Si hay contratos sin término (00/00/0000 → MAX_DATE): usa el año del
-      mayor Fecha Inicio entre esos contratos indefinidos.
-    · Si todos tienen término explícito: usa el año del mayor Fecha Término.
+    Así, al subir un archivo de 2027, detecta automáticamente 2027.
     """
-    indefinidos = grp[grp["_t_sort"] == _MAX_DATE]
-    if not indefinidos.empty:
-        max_ini = indefinidos["_i_sort"].max()
-        return int(max_ini.year) if pd.notna(max_ini) else pd.Timestamp.now().year
-    max_term = grp["_t_sort"].max()
-    return int(max_term.year) if pd.notna(max_term) else pd.Timestamp.now().year
+    terminos = df[COL_TERMINO].apply(_parse_termino)
+    explicitos = terminos[terminos < _MAX_DATE]
+    if not explicitos.empty:
+        return int(explicitos.max().year)
+    inicios = df[COL_INICIO].apply(_parse_inicio).dropna()
+    if not inicios.empty:
+        return int(inicios.max().year)
+    return pd.Timestamp.now().year
 
 
 def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     """
     Obtiene el contrato vigente por persona desde el histórico SIRH.
 
-    Clave de agrupación: (Rut, Correlativo)
-    Cada (Rut, Correlativo) es una línea contractual única.
+    Clave de agrupación: (Rut, Correlativo) — línea contractual única.
 
-    Año de vigencia: se determina AUTOMÁTICAMENTE por persona a partir del
-    último año registrado en sus contratos:
-      · Contrato sin término (00/00/0000) → año del mayor Fecha Inicio
-      · Contratos con término explícito   → año del mayor Fecha Término
-    Esto permite que al subir datos de 2027 el sistema use 2027 sin
-    necesidad de cambiar ningún parámetro.
+    Año de referencia: detectado automáticamente del archivo como el
+    máximo año en Fecha Término Contrato (excluyendo sin-término).
+    Al subir datos de 2027 detecta 2027 sin cambiar nada.
 
-    Regla de selección del registro representativo dentro del grupo vigente:
+    Criterio de vigencia (filtro global):
+      · Fecha Inicio Contrato ≤ 31-dic-{año_ref}
+      · Fecha Término Contrato ≥ 01-ene-{año_ref}
+        → Titulares (00/00/0000 = MAX_DATE) SIEMPRE pasan este filtro.
+
+    Selección del registro representativo por grupo vigente:
       · TITULAR → fila con mayor Fecha Inicio Contrato
       · Otros   → fila con mayor Fecha Término Contrato
     """
@@ -304,32 +309,31 @@ def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     df["_i_sort"] = df[COL_INICIO].apply(_parse_inicio)
     df["_titular"] = df[COL_CALIDAD].astype(str).str.upper().str.contains("TITULAR", na=False)
 
-    resultados = []
-    for (rut, correl), grp in df.groupby([COL_RUT, COL_CORREL], sort=False):
-        # ── Determinar el último año de actividad de esta línea contractual ──
-        anio = _ultimo_anio_grupo(grp)
-        vig_desde = pd.Timestamp(f"{anio}-01-01")
-        vig_hasta = pd.Timestamp(f"{anio}-12-31")
+    # ── Año de referencia global detectado del archivo ────────────────────
+    anio_ref  = _detectar_anio_referencia(df)
+    vig_desde = pd.Timestamp(f"{anio_ref}-01-01")
+    vig_hasta = pd.Timestamp(f"{anio_ref}-12-31")
 
-        # ── Filtrar registros vigentes en ese año ────────────────────────────
-        mask = (
-            grp["_i_sort"].notna() &
-            (grp["_i_sort"] <= vig_hasta) &
-            (grp["_t_sort"] >= vig_desde)
-        )
-        grp_vig = grp[mask]
-        if grp_vig.empty:
-            continue
+    # ── Filtro global de vigencia ─────────────────────────────────────────
+    # Titulares: _t_sort = MAX_DATE → siempre >= vig_desde ✓
+    mask_vig = (
+        df["_i_sort"].notna() &
+        (df["_i_sort"] <= vig_hasta) &
+        (df["_t_sort"] >= vig_desde)
+    )
+    df_vig = df[mask_vig].copy()
 
-        # ── Seleccionar registro representativo ──────────────────────────────
-        if grp_vig["_titular"].any():
-            idx = grp_vig["_i_sort"].idxmax()
-        else:
-            idx = grp_vig["_t_sort"].idxmax()
-        resultados.append(grp_vig.loc[idx])
-
-    if not resultados:
+    if df_vig.empty:
         return pd.DataFrame(columns=df.columns)
+
+    # ── Selección del registro representativo por (Rut, Correlativo) ─────
+    resultados = []
+    for (rut, correl), grp in df_vig.groupby([COL_RUT, COL_CORREL], sort=False):
+        if grp["_titular"].any():
+            idx = grp["_i_sort"].idxmax()   # titular: mayor fecha inicio
+        else:
+            idx = grp["_t_sort"].idxmax()   # otros: mayor fecha término
+        resultados.append(grp.loc[idx])
 
     result = pd.DataFrame(resultados).reset_index(drop=True)
     result = result.drop(columns=["_t_sort", "_i_sort", "_titular"], errors="ignore")
