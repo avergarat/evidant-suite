@@ -1220,7 +1220,16 @@ with tab_liq:
 
     prog_cur, prog_tot = st.session_state.get("et_progress", (0, 1))
     if running_liq or prog_cur > 0:
-        st.progress(min(prog_cur / max(prog_tot, 1), 1.0), text=f"Página {prog_cur} de {prog_tot}")
+        _pct = min(prog_cur / max(prog_tot, 1), 1.0)
+        _pct_str = f"{_pct*100:.1f}%"
+        _restantes = max(prog_tot - prog_cur, 0)
+        st.progress(_pct, text=f"⚙️ Procesando página **{prog_cur}** de **{prog_tot}** — {_pct_str} completado")
+        _mc1, _mc2, _mc3 = st.columns(3)
+        _mc1.metric("Páginas procesadas", prog_cur, delta=None)
+        _mc2.metric("Páginas restantes", _restantes, delta=None)
+        _mc3.metric("Progreso", _pct_str, delta=None)
+        if running_liq:
+            st.spinner("Etiquetando, por favor espere…")
 
     log_lines_liq = st.session_state.get("et_log", [])
     if log_lines_liq:
@@ -1549,8 +1558,16 @@ with tab_hon:
 
         prog_h_cur, prog_h_tot = st.session_state.get("hon_progress", (0, 1))
         if running_hon or prog_h_cur > 0:
-            st.progress(min(prog_h_cur / max(prog_h_tot, 1), 1.0),
-                        text=f"Par {prog_h_cur} de {prog_h_tot}")
+            _h_pct = min(prog_h_cur / max(prog_h_tot, 1), 1.0)
+            _h_pct_str = f"{_h_pct*100:.1f}%"
+            _h_rest = max(prog_h_tot - prog_h_cur, 0)
+            st.progress(_h_pct, text=f"⚙️ Procesando par **{prog_h_cur}** de **{prog_h_tot}** — {_h_pct_str} completado")
+            _hc1, _hc2, _hc3 = st.columns(3)
+            _hc1.metric("Pares procesados", prog_h_cur)
+            _hc2.metric("Pares restantes", _h_rest)
+            _hc3.metric("Progreso", _h_pct_str)
+            if running_hon:
+                st.spinner("Etiquetando honorarios, por favor espere…")
 
         # Log honorarios
         log_lines_hon = st.session_state.get("hon_log", [])
