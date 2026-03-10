@@ -12,13 +12,6 @@ import sqlite3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ev_design
 
-ev_design.render(
-    current   = "dotacion",
-    page_title= "Gestión de Dotación",
-    page_sub  = "Repositorio persistente · Contratos vigentes · Alertas SIRH",
-    icon      = "👥",
-)
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES — nombres de columnas SIRH
 # ══════════════════════════════════════════════════════════════════════════════
@@ -36,11 +29,21 @@ COL_PLANTA  = "Correl. Planta"
 COL_LEY     = "Ley"
 COL_CC      = "C. Costo"
 
-_NULL_STRS = {"00/00/0000", "", "nan", "nat", "none", "s/d", "sd", "NaT"}
-_MAX_DATE  = pd.Timestamp("2999-12-31")
+_NULL_STRS  = {"00/00/0000", "", "nan", "nat", "none", "s/d", "sd", "NaT"}
+_MAX_DATE   = pd.Timestamp("2999-12-31")
+_AÑO_VIG   = 2026                                 # año de vigencia objetivo
+_VIG_DESDE = pd.Timestamp(f"{_AÑO_VIG}-01-01")
+_VIG_HASTA = pd.Timestamp(f"{_AÑO_VIG}-12-31")
+
+ev_design.render(
+    current   = "dotacion",
+    page_title= "Gestión de Dotación",
+    page_sub  = f"Repositorio persistente · Contratos vigentes {_AÑO_VIG} · Alertas SIRH",
+    icon      = "👥",
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BASE DE DATOS
+# BASE DE DATOS — SQLite persistente
 # ══════════════════════════════════════════════════════════════════════════════
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DB   = os.path.join(_ROOT, "dotacion.db")
@@ -57,16 +60,32 @@ def _norm(col: str) -> str:
     return re.sub(r"[^a-z0-9]", "_", str(col).lower()).strip("_")
 
 
-def _save(df: pd.DataFrame):
+def _save(df: pd.DataFrame, filas_originales: int = 0):
     orig_cols  = list(df.columns)
     norm_cols  = [_norm(c) for c in orig_cols]
     col_map    = dict(zip(norm_cols, orig_cols))
 
     conn = _get_conn()
+    # Mapa de columnas
     conn.execute("CREATE TABLE IF NOT EXISTS _colmap (norm TEXT PRIMARY KEY, original TEXT)")
     conn.execute("DELETE FROM _colmap")
     conn.executemany("INSERT INTO _colmap VALUES (?,?)", col_map.items())
 
+    # Metadatos: timestamp y conteo
+    import datetime as _dt
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)"
+    )
+    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('updated_at', ?)",
+                 (_dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('filas_orig', ?)",
+                 (str(filas_originales),))
+    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('contratos_vig', ?)",
+                 (str(len(df)),))
+    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('anio_vig', ?)",
+                 (str(_AÑO_VIG),))
+
+    # Datos
     df_save          = df.copy().astype(str)
     df_save.columns  = norm_cols
     df_save.to_sql("dotacion", conn, if_exists="replace", index=False)
@@ -89,14 +108,15 @@ def _load() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _last_updated() -> str:
+def _meta() -> dict:
+    """Lee la tabla _meta y devuelve un dict key→value."""
     try:
         conn = _get_conn()
-        ts   = conn.execute("SELECT MAX(rowid) FROM dotacion").fetchone()[0]
+        rows = conn.execute("SELECT key, value FROM _meta").fetchall()
         conn.close()
-        return "Repositorio cargado" if ts else ""
+        return {k: v for k, v in rows}
     except Exception:
-        return ""
+        return {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -123,17 +143,20 @@ def _parse_inicio(v):
 
 def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Obtiene el contrato vigente por persona desde el histórico SIRH.
+    Obtiene el contrato vigente en el año {_AÑO_VIG} por persona desde el histórico SIRH.
 
     Clave de agrupación: (Rut, Correlativo)
     Cada (Rut, Correlativo) es una línea contractual única.
     Un funcionario puede tener más de una línea si trabaja en distintos
     bloques horarios (ej. 22+22 = 44 hrs).
 
-    Regla de selección del último registro:
+    Criterio de vigencia al año {_AÑO_VIG}:
+      · Fecha Inicio Contrato  ≤ 31-12-{_AÑO_VIG}
+      · Fecha Término Contrato ≥ 01-01-{_AÑO_VIG}  (o '00/00/0000' = sin término)
+
+    Regla de selección del registro representativo dentro del grupo vigente:
       · TITULAR  → fila con mayor Fecha Inicio Contrato
       · Otros    → fila con mayor Fecha Término Contrato
-                   ('00/00/0000' = activo = fecha máxima)
     """
     df = df.copy()
 
@@ -146,16 +169,26 @@ def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     df["_i_sort"] = df[COL_INICIO].apply(_parse_inicio)
     df["_titular"] = df[COL_CALIDAD].astype(str).str.upper().str.contains("TITULAR", na=False)
 
+    # ── Filtro de vigencia en el año _AÑO_VIG ─────────────────────────────
+    # inicio ≤ 31-dic-2026  Y  término ≥ 01-ene-2026
+    mask_vig = (
+        (df["_i_sort"].notna()) &
+        (df["_i_sort"] <= _VIG_HASTA) &
+        (df["_t_sort"] >= _VIG_DESDE)
+    )
+    df_vig = df[mask_vig].copy()
+
+    if df_vig.empty:
+        return pd.DataFrame(columns=df.columns)
+
+    # ── Selección del registro representativo por (Rut, Correlativo) ──────
     resultados = []
-    for (rut, correl), grp in df.groupby([COL_RUT, COL_CORREL], sort=False):
+    for (rut, correl), grp in df_vig.groupby([COL_RUT, COL_CORREL], sort=False):
         if grp["_titular"].any():
             idx = grp["_i_sort"].idxmax()
         else:
             idx = grp["_t_sort"].idxmax()
         resultados.append(grp.loc[idx])
-
-    if not resultados:
-        return pd.DataFrame(columns=df.columns)
 
     result = pd.DataFrame(resultados).reset_index(drop=True)
     result = result.drop(columns=["_t_sort", "_i_sort", "_titular"], errors="ignore")
@@ -209,11 +242,12 @@ tab_dash, tab_repo, tab_alertas, tab_upload = st.tabs([
 
 # ─── TAB ACTUALIZAR ───────────────────────────────────────────────────────────
 with tab_upload:
-    st.markdown("### ⬆️ Cargar nueva versión de Dotación SIRH")
+    st.markdown(f"### ⬆️ Cargar nueva versión de Dotación SIRH — Vigentes {_AÑO_VIG}")
     st.info(
-        "Sube el archivo Excel exportado desde SIRH (**DOTACION**). "
-        "El sistema detectará automáticamente el último contrato vigente "
-        "por persona y actualizará el repositorio."
+        f"Sube el archivo Excel exportado desde SIRH (**DOTACION**). "
+        f"El sistema filtrará los contratos **vigentes en el año {_AÑO_VIG}** "
+        f"(inicio ≤ 31-12-{_AÑO_VIG} y término ≥ 01-01-{_AÑO_VIG}) "
+        f"y guardará el repositorio en SQLite de forma persistente."
     )
     up = st.file_uploader("Archivo DOTACION (.xlsx / .xls)", type=["xlsx", "xls"], key="dot_up")
 
@@ -225,10 +259,10 @@ with tab_upload:
                 _pb.progress(0.3, text=f"Leídas {len(df_raw):,} filas · {len(df_raw.columns)} columnas")
 
                 df_proc = procesar_dotacion(df_raw)
-                _pb.progress(0.7, text=f"Contratos vigentes detectados: {len(df_proc):,}")
+                _pb.progress(0.7, text=f"Contratos vigentes {_AÑO_VIG} detectados: {len(df_proc):,}")
 
-                _save(df_proc)
-                _pb.progress(1.0, text="Repositorio guardado ✅")
+                _save(df_proc, filas_originales=len(df_raw))
+                _pb.progress(1.0, text="Repositorio guardado en SQLite ✅")
                 _st.update(label="✅ Dotación actualizada correctamente", state="complete", expanded=False)
 
                 n_ruts  = df_proc[COL_RUT].nunique() if COL_RUT in df_proc.columns else "?"
@@ -254,7 +288,19 @@ if df_dot.empty:
 
 # ─── TAB DASHBOARD ────────────────────────────────────────────────────────────
 with tab_dash:
-    st.markdown("### 📊 Resumen Dotación Vigente")
+    st.markdown(f"### 📊 Resumen Dotación — Contratos Vigentes {_AÑO_VIG}")
+
+    # Metadatos del repositorio SQLite
+    _meta_data = _meta()
+    if _meta_data:
+        _upd = _meta_data.get("updated_at", "—")
+        _orig = _meta_data.get("filas_orig", "—")
+        _anio = _meta_data.get("anio_vig", str(_AÑO_VIG))
+        st.caption(
+            f"🗄️ Repositorio SQLite — Última actualización: **{_upd}** · "
+            f"Filas originales SIRH: **{int(_orig):,}**  · "
+            f"Año de vigencia: **{_anio}**"
+        )
 
     # KPIs
     k1, k2, k3, k4 = st.columns(4)
@@ -323,7 +369,7 @@ with tab_dash:
 
 # ─── TAB REPOSITORIO ─────────────────────────────────────────────────────────
 with tab_repo:
-    st.markdown("### 📋 Repositorio — Contratos Vigentes")
+    st.markdown(f"### 📋 Repositorio — Contratos Vigentes {_AÑO_VIG}")
 
     # Filtros
     f1, f2, f3, f4 = st.columns([1.2, 2, 1.8, 1.5])
