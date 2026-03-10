@@ -11,3 +11,4 @@ pytesseract
 PyPDF2
 
 pdfplumber
+libsql-experimental

@@ -4,13 +4,24 @@ Página — Gestión de Dotación
 Repositorio persistente de contratos vigentes · Alertas SIRH · Filtros y descarga
 """
 
-import sys, os, io, re, json
+import sys, os, io, re, json, sqlite3
 import streamlit as st
 import pandas as pd
-import sqlite3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ev_design
+
+# ── Turso (libsql cloud) — carga opcional ────────────────────────────────────
+try:
+    import libsql_experimental as _libsql
+    _HAS_LIBSQL = True
+except ImportError:
+    _HAS_LIBSQL = False
+
+_TURSO_CFG   = st.secrets.get("turso", {}) if hasattr(st, "secrets") else {}
+_TURSO_URL   = _TURSO_CFG.get("url", "")
+_TURSO_TOKEN = _TURSO_CFG.get("token", "")
+_USE_TURSO   = _HAS_LIBSQL and bool(_TURSO_URL) and bool(_TURSO_TOKEN)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES — nombres de columnas SIRH
@@ -50,6 +61,19 @@ _DB   = os.path.join(_ROOT, "dotacion.db")
 
 
 def _get_conn():
+    """
+    Devuelve una conexión activa.
+    · Con secrets [turso] configurados → libsql sincronizado con Turso cloud.
+    · Sin secrets                      → SQLite local (fallback).
+    """
+    if _USE_TURSO:
+        c = _libsql.connect(_DB, sync_url=_TURSO_URL, auth_token=_TURSO_TOKEN)
+        try:
+            c.sync()   # descarga cambios remotos
+        except Exception:
+            pass
+        return c
+    # ── fallback local ────────────────────────────────────────────────────────
     c = sqlite3.connect(_DB, check_same_thread=False)
     c.execute("PRAGMA journal_mode=WAL")
     return c
@@ -90,6 +114,11 @@ def _save(df: pd.DataFrame, filas_originales: int = 0):
     df_save.columns  = norm_cols
     df_save.to_sql("dotacion", conn, if_exists="replace", index=False)
     conn.commit()
+    if _USE_TURSO:
+        try:
+            conn.sync()   # sube cambios a Turso cloud
+        except Exception:
+            pass
     conn.close()
 
 
@@ -293,12 +322,13 @@ with tab_dash:
     # Metadatos del repositorio SQLite
     _meta_data = _meta()
     if _meta_data:
-        _upd = _meta_data.get("updated_at", "—")
+        _upd  = _meta_data.get("updated_at", "—")
         _orig = _meta_data.get("filas_orig", "—")
         _anio = _meta_data.get("anio_vig", str(_AÑO_VIG))
+        _backend = "☁️ Turso (persistente)" if _USE_TURSO else "🗄️ SQLite local"
         st.caption(
-            f"🗄️ Repositorio SQLite — Última actualización: **{_upd}** · "
-            f"Filas originales SIRH: **{int(_orig):,}**  · "
+            f"{_backend} — Última actualización: **{_upd}** · "
+            f"Filas originales SIRH: **{int(_orig):,}** · "
             f"Año de vigencia: **{_anio}**"
         )
 
