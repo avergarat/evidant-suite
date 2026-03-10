@@ -876,20 +876,29 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
     fmt_clp_cols  = fmt_clp_cols  or []
     highlight_cols = highlight_cols or []
 
+    # Estilo base de encabezado: sin nowrap → se ajusta al ancho del contenido
+    _TH_BASE = (
+        "padding:8px 10px;text-align:left;"
+        "font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;"
+        "letter-spacing:1.2px;text-transform:uppercase;"
+        "white-space:normal;word-break:break-word;vertical-align:bottom;"
+        "border-bottom:1px solid rgba(255,255,255,.07);"
+    )
+    _TD_BASE = (
+        "padding:6px 10px;font-size:12px;"
+        "font-family:Outfit,sans-serif;"
+        "white-space:nowrap;"
+        "border-bottom:1px solid rgba(255,255,255,.04);"
+    )
+
     def _th_style(col):
         if col in highlight_cols:
             return (
-                f'<th style="padding:8px 14px;text-align:left;'
-                f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;'
-                f'letter-spacing:1.5px;text-transform:uppercase;color:#ffffff;'
-                f'background:#1a6bb5;border-bottom:1px solid rgba(255,255,255,.07);'
-                f'white-space:nowrap;">{col}</th>'
+                f'<th style="{_TH_BASE}color:#ffffff;background:#1a6bb5;">'
+                f'{col}</th>'
             )
         return (
-            f'<th style="padding:8px 14px;text-align:left;'
-            f'font-family:JetBrains Mono,monospace;font-size:10px;font-weight:600;'
-            f'letter-spacing:1.5px;text-transform:uppercase;color:#535353;'
-            f'border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap;">'
+            f'<th style="{_TH_BASE}color:#535353;">'
             f'{col}</th>'
         )
 
@@ -906,17 +915,13 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
                 val_str = str(val) if val is not None else "—"
             if col in highlight_cols:
                 cells += (
-                    f'<td style="padding:7px 14px;font-size:12px;'
-                    f'font-family:Outfit,sans-serif;color:#ffffff;font-weight:600;'
-                    f'background:rgba(26,107,181,0.20);'
-                    f'border-bottom:1px solid rgba(255,255,255,.04);">'
+                    f'<td style="{_TD_BASE}color:#ffffff;font-weight:600;'
+                    f'background:rgba(26,107,181,0.20);">'
                     f'{val_str}</td>'
                 )
             else:
                 cells += (
-                    f'<td style="padding:7px 14px;font-size:12px;'
-                    f'font-family:Outfit,sans-serif;color:#b3b3b3;'
-                    f'border-bottom:1px solid rgba(255,255,255,.04);">'
+                    f'<td style="{_TD_BASE}color:#b3b3b3;">'
                     f'{val_str}</td>'
                 )
         rows += f'<tr style="background:{bg};">{cells}</tr>'
@@ -924,7 +929,7 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
     return (
         f'<div style="background:#181818;border:1px solid rgba(255,255,255,.07);'
         f'border-radius:12px;overflow:auto;margin-top:4px;">'
-        f'<table style="width:100%;border-collapse:collapse;">'
+        f'<table style="border-collapse:collapse;table-layout:auto;">'
         f'<thead><tr>{th}</tr></thead>'
         f'<tbody>{rows}</tbody>'
         f'</table></div>'
