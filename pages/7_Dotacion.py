@@ -81,14 +81,11 @@ COL_CC      = "C. Costo"
 
 _NULL_STRS  = {"00/00/0000", "", "nan", "nat", "none", "s/d", "sd", "NaT"}
 _MAX_DATE   = pd.Timestamp("2999-12-31")
-_AÑO_VIG   = 2026                                 # año de vigencia objetivo
-_VIG_DESDE = pd.Timestamp(f"{_AÑO_VIG}-01-01")
-_VIG_HASTA = pd.Timestamp(f"{_AÑO_VIG}-12-31")
 
 ev_design.render(
     current   = "dotacion",
     page_title= "Gestión de Dotación",
-    page_sub  = f"Repositorio persistente · Contratos vigentes {_AÑO_VIG} · Alertas SIRH",
+    page_sub  = "Repositorio persistente · Contratos vigentes por último año registrado · Alertas SIRH",
     icon      = "👥",
 )
 
@@ -131,7 +128,7 @@ def _save_turso(df: pd.DataFrame, filas_originales: int = 0):
     for k, v in [("updated_at", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                  ("filas_orig", str(filas_originales)),
                  ("contratos_vig", str(len(df))),
-                 ("anio_vig", str(_AÑO_VIG))]:
+                 ("anio_vig", "automático por persona")]:
         _turso_exec("INSERT OR REPLACE INTO _meta VALUES (?,?)", [k, v])
 
     col_defs  = ", ".join(f'"{c}" TEXT' for c in norm_cols)
@@ -190,7 +187,7 @@ def _save_local(df: pd.DataFrame, filas_originales: int = 0):
     for k, v in [("updated_at", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                  ("filas_orig", str(filas_originales)),
                  ("contratos_vig", str(len(df))),
-                 ("anio_vig", str(_AÑO_VIG))]:
+                 ("anio_vig", "automático por persona")]:
         conn.execute("INSERT OR REPLACE INTO _meta VALUES (?,?)", (k, v))
     df_s = df.copy().astype(str)
     df_s.columns = norm_cols
@@ -263,26 +260,42 @@ def _parse_inicio(v):
         return pd.NaT
 
 
+def _ultimo_anio_grupo(grp: pd.DataFrame) -> int:
+    """
+    Determina el último año de actividad contractual de un grupo (Rut, Correlativo).
+
+    · Si hay contratos sin término (00/00/0000 → MAX_DATE): usa el año del
+      mayor Fecha Inicio entre esos contratos indefinidos.
+    · Si todos tienen término explícito: usa el año del mayor Fecha Término.
+    """
+    indefinidos = grp[grp["_t_sort"] == _MAX_DATE]
+    if not indefinidos.empty:
+        max_ini = indefinidos["_i_sort"].max()
+        return int(max_ini.year) if pd.notna(max_ini) else pd.Timestamp.now().year
+    max_term = grp["_t_sort"].max()
+    return int(max_term.year) if pd.notna(max_term) else pd.Timestamp.now().year
+
+
 def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Obtiene el contrato vigente en el año {_AÑO_VIG} por persona desde el histórico SIRH.
+    Obtiene el contrato vigente por persona desde el histórico SIRH.
 
     Clave de agrupación: (Rut, Correlativo)
     Cada (Rut, Correlativo) es una línea contractual única.
-    Un funcionario puede tener más de una línea si trabaja en distintos
-    bloques horarios (ej. 22+22 = 44 hrs).
 
-    Criterio de vigencia al año {_AÑO_VIG}:
-      · Fecha Inicio Contrato  ≤ 31-12-{_AÑO_VIG}
-      · Fecha Término Contrato ≥ 01-01-{_AÑO_VIG}  (o '00/00/0000' = sin término)
+    Año de vigencia: se determina AUTOMÁTICAMENTE por persona a partir del
+    último año registrado en sus contratos:
+      · Contrato sin término (00/00/0000) → año del mayor Fecha Inicio
+      · Contratos con término explícito   → año del mayor Fecha Término
+    Esto permite que al subir datos de 2027 el sistema use 2027 sin
+    necesidad de cambiar ningún parámetro.
 
     Regla de selección del registro representativo dentro del grupo vigente:
-      · TITULAR  → fila con mayor Fecha Inicio Contrato
-      · Otros    → fila con mayor Fecha Término Contrato
+      · TITULAR → fila con mayor Fecha Inicio Contrato
+      · Otros   → fila con mayor Fecha Término Contrato
     """
     df = df.copy()
 
-    # Verificar columnas mínimas
     for col in [COL_RUT, COL_CORREL, COL_CALIDAD, COL_INICIO, COL_TERMINO]:
         if col not in df.columns:
             raise ValueError(f"Columna requerida no encontrada: '{col}'")
@@ -291,26 +304,32 @@ def procesar_dotacion(df: pd.DataFrame) -> pd.DataFrame:
     df["_i_sort"] = df[COL_INICIO].apply(_parse_inicio)
     df["_titular"] = df[COL_CALIDAD].astype(str).str.upper().str.contains("TITULAR", na=False)
 
-    # ── Filtro de vigencia en el año _AÑO_VIG ─────────────────────────────
-    # inicio ≤ 31-dic-2026  Y  término ≥ 01-ene-2026
-    mask_vig = (
-        (df["_i_sort"].notna()) &
-        (df["_i_sort"] <= _VIG_HASTA) &
-        (df["_t_sort"] >= _VIG_DESDE)
-    )
-    df_vig = df[mask_vig].copy()
-
-    if df_vig.empty:
-        return pd.DataFrame(columns=df.columns)
-
-    # ── Selección del registro representativo por (Rut, Correlativo) ──────
     resultados = []
-    for (rut, correl), grp in df_vig.groupby([COL_RUT, COL_CORREL], sort=False):
-        if grp["_titular"].any():
-            idx = grp["_i_sort"].idxmax()
+    for (rut, correl), grp in df.groupby([COL_RUT, COL_CORREL], sort=False):
+        # ── Determinar el último año de actividad de esta línea contractual ──
+        anio = _ultimo_anio_grupo(grp)
+        vig_desde = pd.Timestamp(f"{anio}-01-01")
+        vig_hasta = pd.Timestamp(f"{anio}-12-31")
+
+        # ── Filtrar registros vigentes en ese año ────────────────────────────
+        mask = (
+            grp["_i_sort"].notna() &
+            (grp["_i_sort"] <= vig_hasta) &
+            (grp["_t_sort"] >= vig_desde)
+        )
+        grp_vig = grp[mask]
+        if grp_vig.empty:
+            continue
+
+        # ── Seleccionar registro representativo ──────────────────────────────
+        if grp_vig["_titular"].any():
+            idx = grp_vig["_i_sort"].idxmax()
         else:
-            idx = grp["_t_sort"].idxmax()
-        resultados.append(grp.loc[idx])
+            idx = grp_vig["_t_sort"].idxmax()
+        resultados.append(grp_vig.loc[idx])
+
+    if not resultados:
+        return pd.DataFrame(columns=df.columns)
 
     result = pd.DataFrame(resultados).reset_index(drop=True)
     result = result.drop(columns=["_t_sort", "_i_sort", "_titular"], errors="ignore")
@@ -364,12 +383,12 @@ tab_dash, tab_repo, tab_alertas, tab_upload = st.tabs([
 
 # ─── TAB ACTUALIZAR ───────────────────────────────────────────────────────────
 with tab_upload:
-    st.markdown(f"### ⬆️ Cargar nueva versión de Dotación SIRH — Vigentes {_AÑO_VIG}")
+    st.markdown("### ⬆️ Cargar nueva versión de Dotación SIRH")
     st.info(
-        f"Sube el archivo Excel exportado desde SIRH (**DOTACION**). "
-        f"El sistema filtrará los contratos **vigentes en el año {_AÑO_VIG}** "
-        f"(inicio ≤ 31-12-{_AÑO_VIG} y término ≥ 01-01-{_AÑO_VIG}) "
-        f"y guardará el repositorio en SQLite de forma persistente."
+        "Sube el archivo Excel exportado desde SIRH (**DOTACION**). "
+        "El sistema detectará automáticamente el **último año de actividad contractual** "
+        "de cada persona y conservará el contrato vigente en ese año. "
+        "Al subir datos de 2027 usará 2027; al subir 2028 usará 2028 — sin cambiar nada."
     )
     up = st.file_uploader("Archivo DOTACION (.xlsx / .xls)", type=["xlsx", "xls"], key="dot_up")
 
@@ -381,7 +400,7 @@ with tab_upload:
                 _pb.progress(0.3, text=f"Leídas {len(df_raw):,} filas · {len(df_raw.columns)} columnas")
 
                 df_proc = procesar_dotacion(df_raw)
-                _pb.progress(0.7, text=f"Contratos vigentes {_AÑO_VIG} detectados: {len(df_proc):,}")
+                _pb.progress(0.7, text=f"Contratos vigentes detectados: {len(df_proc):,}")
 
                 _save(df_proc, filas_originales=len(df_raw))
                 _pb.progress(1.0, text="Repositorio guardado en SQLite ✅")
@@ -410,14 +429,14 @@ if df_dot.empty:
 
 # ─── TAB DASHBOARD ────────────────────────────────────────────────────────────
 with tab_dash:
-    st.markdown(f"### 📊 Resumen Dotación — Contratos Vigentes {_AÑO_VIG}")
+    st.markdown("### 📊 Resumen Dotación — Contratos Vigentes por Último Año Registrado")
 
     # Metadatos del repositorio SQLite
     _meta_data = _meta()
     if _meta_data:
         _upd  = _meta_data.get("updated_at", "—")
         _orig = _meta_data.get("filas_orig", "—")
-        _anio = _meta_data.get("anio_vig", str(_AÑO_VIG))
+        _anio = _meta_data.get("anio_vig", "automático")
         _backend = "☁️ Turso (persistente)" if _USE_TURSO else "🗄️ SQLite local"
         st.caption(
             f"{_backend} — Última actualización: **{_upd}** · "
@@ -492,7 +511,7 @@ with tab_dash:
 
 # ─── TAB REPOSITORIO ─────────────────────────────────────────────────────────
 with tab_repo:
-    st.markdown(f"### 📋 Repositorio — Contratos Vigentes {_AÑO_VIG}")
+    st.markdown("### 📋 Repositorio — Contratos Vigentes")
 
     # Filtros
     f1, f2, f3, f4 = st.columns([1.2, 2, 1.8, 1.5])
