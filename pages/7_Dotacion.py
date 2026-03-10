@@ -11,17 +11,56 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ev_design
 
-# ── Turso (libsql cloud) — carga opcional ────────────────────────────────────
+# ── Turso — API HTTP (sin paquetes extra, solo requests) ─────────────────────
 try:
-    import libsql_experimental as _libsql
-    _HAS_LIBSQL = True
+    import requests as _requests
+    _HAS_REQUESTS = True
 except ImportError:
-    _HAS_LIBSQL = False
+    _HAS_REQUESTS = False
 
 _TURSO_CFG   = st.secrets.get("turso", {}) if hasattr(st, "secrets") else {}
 _TURSO_URL   = _TURSO_CFG.get("url", "")
 _TURSO_TOKEN = _TURSO_CFG.get("token", "")
-_USE_TURSO   = _HAS_LIBSQL and bool(_TURSO_URL) and bool(_TURSO_TOKEN)
+_USE_TURSO   = _HAS_REQUESTS and bool(_TURSO_URL) and bool(_TURSO_TOKEN)
+
+
+def _turso_http_url() -> str:
+    return _TURSO_URL.replace("libsql://", "https://") + "/v2/pipeline"
+
+
+def _turso_pipeline(stmts: list) -> list:
+    """Envía una lista de sentencias SQL a Turso vía HTTP y retorna los results."""
+    reqs = [{"type": "execute", "stmt": s} for s in stmts]
+    reqs.append({"type": "close"})
+    resp = _requests.post(
+        _turso_http_url(),
+        json={"requests": reqs},
+        headers={"Authorization": f"Bearer {_TURSO_TOKEN}",
+                 "Content-Type": "application/json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])
+
+
+def _turso_exec(sql: str, args: list = None):
+    stmt = {"sql": sql}
+    if args:
+        stmt["args"] = [{"type": "text", "value": str(a) if a is not None else ""}
+                        for a in args]
+    _turso_pipeline([stmt])
+
+
+def _turso_query(sql: str) -> pd.DataFrame:
+    results = _turso_pipeline([{"sql": sql}])
+    if not results:
+        return pd.DataFrame()
+    res_data = results[0].get("response", {}).get("result", {})
+    cols     = [c["name"] for c in res_data.get("cols", [])]
+    rows_raw = res_data.get("rows", [])
+    rows     = [[v.get("value") if v.get("type") != "null" else None
+                 for v in row] for row in rows_raw]
+    return pd.DataFrame(rows, columns=cols) if cols else pd.DataFrame()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES — nombres de columnas SIRH
@@ -60,71 +99,109 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DB   = os.path.join(_ROOT, "dotacion.db")
 
 
-def _get_conn():
-    """
-    Devuelve una conexión activa.
-    · Con secrets [turso] configurados → libsql sincronizado con Turso cloud.
-    · Sin secrets                      → SQLite local (fallback).
-    """
-    if _USE_TURSO:
-        c = _libsql.connect(_DB, sync_url=_TURSO_URL, auth_token=_TURSO_TOKEN)
+def _norm(col: str) -> str:
+    return re.sub(r"[^a-z0-9]", "_", str(col).lower()).strip("_")
+
+
+# ── Turso HTTP ────────────────────────────────────────────────────────────────
+
+_TURSO_BATCH = 80   # filas por pipeline
+
+def _save_turso(df: pd.DataFrame, filas_originales: int = 0):
+    import datetime as _dt
+    norm_cols = [_norm(c) for c in df.columns]
+    col_map   = dict(zip(norm_cols, list(df.columns)))
+    df_s      = df.copy().astype(str)
+    df_s.columns = norm_cols
+
+    # Recrear tablas
+    for tbl in ("dotacion", "_colmap", "_meta"):
+        _turso_exec(f"DROP TABLE IF EXISTS {tbl}")
+
+    _turso_exec("CREATE TABLE _colmap (norm TEXT PRIMARY KEY, original TEXT)")
+    for i in range(0, len(col_map), _TURSO_BATCH):
+        chunk = list(col_map.items())[i:i + _TURSO_BATCH]
+        _turso_pipeline([
+            {"sql": "INSERT INTO _colmap VALUES (?,?)",
+             "args": [{"type": "text", "value": k}, {"type": "text", "value": v}]}
+            for k, v in chunk
+        ])
+
+    _turso_exec("CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT)")
+    for k, v in [("updated_at", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                 ("filas_orig", str(filas_originales)),
+                 ("contratos_vig", str(len(df))),
+                 ("anio_vig", str(_AÑO_VIG))]:
+        _turso_exec("INSERT OR REPLACE INTO _meta VALUES (?,?)", [k, v])
+
+    col_defs  = ", ".join(f'"{c}" TEXT' for c in norm_cols)
+    _turso_exec(f"CREATE TABLE dotacion ({col_defs})")
+    placeholders = ", ".join("?" * len(norm_cols))
+    cols_str     = ", ".join(f'"{c}"' for c in norm_cols)
+    insert_sql   = f'INSERT INTO dotacion ({cols_str}) VALUES ({placeholders})'
+    rows = df_s.values.tolist()
+    for i in range(0, len(rows), _TURSO_BATCH):
+        _turso_pipeline([
+            {"sql": insert_sql,
+             "args": [{"type": "text", "value": str(v)} for v in row]}
+            for row in rows[i:i + _TURSO_BATCH]
+        ])
+
+
+def _load_turso() -> pd.DataFrame:
+    try:
+        df = _turso_query("SELECT * FROM dotacion")
         try:
-            c.sync()   # descarga cambios remotos
+            cm = _turso_query("SELECT norm, original FROM _colmap")
+            col_map = dict(zip(cm["norm"], cm["original"]))
+            df.columns = [col_map.get(c, c) for c in df.columns]
         except Exception:
             pass
-        return c
-    # ── fallback local ────────────────────────────────────────────────────────
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def _meta_turso() -> dict:
+    try:
+        df = _turso_query("SELECT key, value FROM _meta")
+        return dict(zip(df["key"], df["value"]))
+    except Exception:
+        return {}
+
+
+# ── SQLite local (fallback) ───────────────────────────────────────────────────
+
+def _local_conn():
     c = sqlite3.connect(_DB, check_same_thread=False)
     c.execute("PRAGMA journal_mode=WAL")
     return c
 
 
-def _norm(col: str) -> str:
-    """Normaliza nombre de columna para SQLite."""
-    return re.sub(r"[^a-z0-9]", "_", str(col).lower()).strip("_")
-
-
-def _save(df: pd.DataFrame, filas_originales: int = 0):
-    orig_cols  = list(df.columns)
-    norm_cols  = [_norm(c) for c in orig_cols]
-    col_map    = dict(zip(norm_cols, orig_cols))
-
-    conn = _get_conn()
-    # Mapa de columnas
+def _save_local(df: pd.DataFrame, filas_originales: int = 0):
+    import datetime as _dt
+    norm_cols = [_norm(c) for c in df.columns]
+    col_map   = dict(zip(norm_cols, list(df.columns)))
+    conn = _local_conn()
     conn.execute("CREATE TABLE IF NOT EXISTS _colmap (norm TEXT PRIMARY KEY, original TEXT)")
     conn.execute("DELETE FROM _colmap")
     conn.executemany("INSERT INTO _colmap VALUES (?,?)", col_map.items())
-
-    # Metadatos: timestamp y conteo
-    import datetime as _dt
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)"
-    )
-    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('updated_at', ?)",
-                 (_dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
-    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('filas_orig', ?)",
-                 (str(filas_originales),))
-    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('contratos_vig', ?)",
-                 (str(len(df)),))
-    conn.execute("INSERT OR REPLACE INTO _meta VALUES ('anio_vig', ?)",
-                 (str(_AÑO_VIG),))
-
-    # Datos
-    df_save          = df.copy().astype(str)
-    df_save.columns  = norm_cols
-    df_save.to_sql("dotacion", conn, if_exists="replace", index=False)
+    conn.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
+    for k, v in [("updated_at", _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                 ("filas_orig", str(filas_originales)),
+                 ("contratos_vig", str(len(df))),
+                 ("anio_vig", str(_AÑO_VIG))]:
+        conn.execute("INSERT OR REPLACE INTO _meta VALUES (?,?)", (k, v))
+    df_s = df.copy().astype(str)
+    df_s.columns = norm_cols
+    df_s.to_sql("dotacion", conn, if_exists="replace", index=False)
     conn.commit()
-    if _USE_TURSO:
-        try:
-            conn.sync()   # sube cambios a Turso cloud
-        except Exception:
-            pass
     conn.close()
 
 
-def _load() -> pd.DataFrame:
+def _load_local() -> pd.DataFrame:
     try:
-        conn = _get_conn()
+        conn = _local_conn()
         df   = pd.read_sql("SELECT * FROM dotacion", conn)
         try:
             col_map = dict(pd.read_sql("SELECT norm, original FROM _colmap", conn).values)
@@ -137,15 +214,31 @@ def _load() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _meta() -> dict:
-    """Lee la tabla _meta y devuelve un dict key→value."""
+def _meta_local() -> dict:
     try:
-        conn = _get_conn()
+        conn = _local_conn()
         rows = conn.execute("SELECT key, value FROM _meta").fetchall()
         conn.close()
         return {k: v for k, v in rows}
     except Exception:
         return {}
+
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+
+def _save(df: pd.DataFrame, filas_originales: int = 0):
+    if _USE_TURSO:
+        _save_turso(df, filas_originales)
+    else:
+        _save_local(df, filas_originales)
+
+
+def _load() -> pd.DataFrame:
+    return _load_turso() if _USE_TURSO else _load_local()
+
+
+def _meta() -> dict:
+    return _meta_turso() if _USE_TURSO else _meta_local()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
