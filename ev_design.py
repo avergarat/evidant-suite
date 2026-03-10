@@ -881,7 +881,7 @@ def ev_table_html(df, fmt_clp_cols=None, highlight_cols=None):
         "padding:8px 12px;text-align:left;"
         "font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;"
         "letter-spacing:1.2px;text-transform:uppercase;"
-        "white-space:normal;word-break:break-word;vertical-align:bottom;"
+        "white-space:normal;word-break:break-word;vertical-align:top;"
         "min-width:70px;"
         "border-bottom:1px solid rgba(255,255,255,.07);"
     )
