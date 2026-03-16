@@ -957,9 +957,9 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
     st.markdown(_NAVBAR_TAG_JS,    unsafe_allow_html=True)
 
     # ── 2. Navbar como columnas (renderiza HORIZONTAL de verdad) ────────────
-    # Cols: logo | P1 | P2 | P3 | P4 | sep | Presupuesto | sep | RRHH | Inicio | sep | OCR/PDF | Liq. | sep | relleno
+    # Cols: logo | P1 | P2 | P3 | P4 | sep | KPIs | sep | Repos | Inicio | sep | OCR/PDF | Dotación | Rev.Dot. | relleno
     c = st.columns(
-        [2.3, 1.4, 1.5, 1.9, 1.3, 0.3, 1.6, 0.3, 1.4, 1.1, 0.2, 1.2, 1.3, 1.8, 0.2, 0.3],
+        [1.7, 1.0, 1.1, 1.5, 1.0, 0.2, 1.2, 0.2, 1.0, 0.8, 0.2, 0.9, 1.0, 1.5, 0.15],
         gap="small"
     )
 
@@ -974,33 +974,33 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
 
     with c[1]:   # Paso 1
         st.markdown('<span class="ev-nav-grp-lbl">⚙ Proc. Financiero</span>', unsafe_allow_html=True)
-        st.page_link("pages/4_Consolidacion_Remu.py", label="P1 · Consolidación")
+        st.page_link("pages/4_Consolidacion_Remu.py", label="P1 · Consol.")
 
     with c[2]:   # Paso 2
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
-        st.page_link("pages/1_Redistribucion.py", label="P2 · Redistribución")
+        st.page_link("pages/1_Redistribucion.py", label="P2 · Redist.")
 
     with c[3]:   # Paso 3
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
-        st.page_link("pages/2_Programa_Financiero.py", label="P3 · Prog. Financiero")
+        st.page_link("pages/2_Programa_Financiero.py", label="P3 · Prog. Fin.")
 
     with c[4]:   # Paso 4
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
-        st.page_link("pages/3_Rendiciones.py", label="P4 · Rendiciones")
+        st.page_link("pages/3_Rendiciones.py", label="P4 · Rend.")
 
     with c[5]:   # Separador visual
         st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)
 
     with c[6]:   # Presupuesto
         st.markdown('<span class="ev-nav-grp-lbl">💰 Presupuesto</span>', unsafe_allow_html=True)
-        st.page_link("pages/5_Gestion_Presupuesto.py", label="Dashboard & KPIs")
+        st.page_link("pages/5_Gestion_Presupuesto.py", label="KPIs")
 
     with c[7]:   # Separador visual
         st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)
 
     with c[8]:   # RRHH
         st.markdown('<span class="ev-nav-grp-lbl">👥 RR.HH.</span>', unsafe_allow_html=True)
-        st.page_link("pages/0_Repositorio_RRHH.py", label="Repositorio")
+        st.page_link("pages/0_Repositorio_RRHH.py", label="Repos.")
 
     with c[9]:   # Inicio
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
@@ -1009,22 +1009,19 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
     with c[10]:  # Separador visual
         st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)
 
-    with c[11]:  # Imágenes — OCR / PDF
-        st.markdown('<span class="ev-nav-grp-lbl">🖼 Imágenes</span>', unsafe_allow_html=True)
-        st.page_link("pages/6_Procesamiento_Imagenes.py", label="OCR / PDF")
+    with c[11]:  # OCR / PDF
+        st.markdown('<span class="ev-nav-grp-lbl">🖼 · 👥 Dotación</span>', unsafe_allow_html=True)
+        st.page_link("pages/6_Procesamiento_Imagenes.py", label="OCR/PDF")
 
-    with c[12]:  # Dotación
+    with c[12]:  # Dotación SIRH
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
         st.page_link("pages/7_Dotacion.py", label="Dotación")
 
-    with c[13]:  # Rev. Dotación por Centro
+    with c[13]:  # Revisión Dotación por Centro
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
         st.page_link("pages/8_Rev_Dotacion_Centro.py", label="Rev. Dotación")
 
-    with c[14]:  # Separador final
-        st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)
-
-    # c[15] = relleno (vacío)
+    # c[14] = relleno (vacío)
 
     # ── 3. Page header (solo si se proporciona título) ───────────────────────
     if page_title:

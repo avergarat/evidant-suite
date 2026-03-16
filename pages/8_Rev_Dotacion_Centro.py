@@ -166,9 +166,10 @@ with tab_vista:
 
     if df_dot.empty:
         st.warning(
-            "No hay datos de dotación cargados. "
-            "Ve a **Dotación** en la barra superior → pestaña **⬆️ Actualizar** para cargar el archivo SIRH."
+            "No hay datos de dotación cargados en esta sesión. "
+            "Primero debes cargar el archivo SIRH en el módulo **Dotación**."
         )
+        st.page_link("pages/7_Dotacion.py", label="👉 Ir a Dotación → pestaña ⬆️ Actualizar")
     elif col_cesfam is None:
         st.error(
             f"No se encontró columna de Centro de Salud. "
