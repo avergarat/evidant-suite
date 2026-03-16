@@ -959,7 +959,7 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
     # ── 2. Navbar como columnas (renderiza HORIZONTAL de verdad) ────────────
     # Cols: logo | P1 | P2 | P3 | P4 | sep | Presupuesto | sep | RRHH | Inicio | sep | OCR/PDF | Liq. | sep | relleno
     c = st.columns(
-        [2.3, 1.4, 1.5, 1.9, 1.3, 0.3, 1.6, 0.3, 1.4, 1.1, 0.2, 1.2, 1.6, 0.2, 0.3],
+        [2.3, 1.4, 1.5, 1.9, 1.3, 0.3, 1.6, 0.3, 1.4, 1.1, 0.2, 1.2, 1.3, 1.8, 0.2, 0.3],
         gap="small"
     )
 
@@ -1013,14 +1013,18 @@ def render(current: str = "", page_title: str = "", page_sub: str = "",
         st.markdown('<span class="ev-nav-grp-lbl">🖼 Imágenes</span>', unsafe_allow_html=True)
         st.page_link("pages/6_Procesamiento_Imagenes.py", label="OCR / PDF")
 
-    with c[12]:  # Imágenes — Liquidaciones Accesorias
+    with c[12]:  # Dotación
         st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
         st.page_link("pages/7_Dotacion.py", label="Dotación")
 
-    with c[13]:  # Separador final
+    with c[13]:  # Rev. Dotación por Centro
+        st.markdown('<span class="ev-nav-grp-lbl">&nbsp;</span>', unsafe_allow_html=True)
+        st.page_link("pages/8_Rev_Dotacion_Centro.py", label="Rev. Dotación")
+
+    with c[14]:  # Separador final
         st.markdown('<div class="ev-vsep"></div>', unsafe_allow_html=True)
 
-    # c[14] = relleno (vacío)
+    # c[15] = relleno (vacío)
 
     # ── 3. Page header (solo si se proporciona título) ───────────────────────
     if page_title:

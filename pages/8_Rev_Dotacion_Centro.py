@@ -162,356 +162,303 @@ with tab_vista:
     st.markdown("### 🏥 Revisión de Dotación por Centro de Salud")
 
     df_dot = _load_dotacion()
+    col_cesfam = _find_col(df_dot, _COL_CESFAM_OPTS) if not df_dot.empty else None
 
     if df_dot.empty:
         st.warning(
             "No hay datos de dotación cargados. "
-            "Ve a **👥 Gestión de Dotación** → pestaña **⬆️ Actualizar** para cargar el archivo SIRH."
+            "Ve a **Dotación** en la barra superior → pestaña **⬆️ Actualizar** para cargar el archivo SIRH."
         )
-        st.stop()
-
-    # ── Detectar columna de CESFAM ────────────────────────────────────────────
-    col_cesfam = _find_col(df_dot, _COL_CESFAM_OPTS)
-    if col_cesfam is None:
+    elif col_cesfam is None:
         st.error(
-            f"No se encontró columna de Centro de Salud en la dotación. "
+            f"No se encontró columna de Centro de Salud. "
             f"Columnas disponibles: {list(df_dot.columns)}"
         )
-        st.stop()
-
-    # ── Selectores de período y CESFAM ────────────────────────────────────────
-    c1, c2, c3 = st.columns([1, 1, 2])
-    anio_sel = c1.number_input("Año", min_value=2020, max_value=2035,
-                               value=datetime.datetime.now().year, step=1, key="rv_anio")
-    mes_sel  = c2.selectbox(
-        "Mes", list(range(1, 13)),
-        format_func=lambda m: ["Ene","Feb","Mar","Abr","May","Jun",
-                                "Jul","Ago","Sep","Oct","Nov","Dic"][m-1],
-        index=datetime.datetime.now().month - 1, key="rv_mes",
-    )
-    mes_anio = _mes_anio_str(int(mes_sel), int(anio_sel))
-
-    cesfam_list = _list_cesfam_values(df_dot, col_cesfam)
-    cesfam_sel = c3.selectbox("Centro de Salud (Descripción Unidad)", cesfam_list, key="rv_cesfam")
-
-    if st.button("🔄 Cambiar Centro / Período", key="rv_reset"):
-        _reset_session_centro()
-        st.rerun()
-
-    st.divider()
-
-    # ── Cargar asignaciones guardadas para este mes/CESFAM ───────────────────
-    df_asig_guardadas = db_rev.get_asignaciones(mes_anio)
-    if not df_asig_guardadas.empty:
-        for rut_g, grp in df_asig_guardadas.groupby("rut"):
-            rut_g = str(rut_g)
-            if rut_g not in st.session_state["rdot_asig"]:
-                st.session_state["rdot_asig"][rut_g] = list(grp["encargatura"])
-
-    df_rev_guardada = db_rev.get_revision_mensual(mes_anio, cesfam_sel)
-    if not df_rev_guardada.empty:
-        for _, rg in df_rev_guardada.iterrows():
-            rut_g = str(rg["rut"])
-            if rut_g not in st.session_state["rdot_unidad"]:
-                st.session_state["rdot_unidad"][rut_g] = str(rg.get("unidad_desempeno", ""))
-            if rut_g not in st.session_state["rdot_obs"]:
-                st.session_state["rdot_obs"][rut_g] = str(rg.get("observaciones", ""))
-
-    # ── Filtrar dotación para el CESFAM seleccionado ─────────────────────────
-    df_centro = _filtrar_por_cesfam(df_dot, col_cesfam, cesfam_sel)
-    if df_centro.empty:
-        st.info(f"No se encontraron funcionarios para **{cesfam_sel}**.")
-        st.stop()
-
-    # ── Lista de encargaturas disponibles ─────────────────────────────────────
-    df_hrs_gen   = db_rev.get_horas_general()
-    df_hrs_csfm  = db_rev.get_horas_cesfam(cesfam_sel)
-    all_encargaturas_gen  = sorted(df_hrs_gen["nombre"].tolist())
-    all_encargaturas_csfm = sorted(df_hrs_csfm["encargatura"].tolist()) if not df_hrs_csfm.empty else []
-    # Unión sin duplicados, manteniendo orden (CESFAM-específicas primero)
-    seen = set()
-    all_encargaturas = []
-    for e in all_encargaturas_csfm + all_encargaturas_gen:
-        if e not in seen:
-            all_encargaturas.append(e)
-            seen.add(e)
-
-    # ── Lista de unidades de desempeño disponibles ────────────────────────────
-    df_ud = db_rev.get_unidades_desempeno(cesfam_sel)
-    ud_options = sorted(df_ud["unidad_desempeno"].unique().tolist()) if not df_ud.empty else []
-
-    st.markdown(f"**{len(df_centro)} funcionarios** encontrados en **{cesfam_sel}** — Período: `{mes_anio}`")
-
-    # ── Construir tabla de trabajo ─────────────────────────────────────────────
-    col_rut    = _find_col(df_centro, [_COL_RUT, "Rut", "RUT", "rut"])
-    col_dv     = _find_col(df_centro, [_COL_DV, "DV", "dv"])
-    col_nombre = _find_col(df_centro, [_COL_NOMBRE, "Nombre", "NOMBRE"])
-    col_calidad= _find_col(df_centro, [_COL_CALIDAD, "Calidad Jurídica", "Descripcion Calidad Juridica"])
-    col_cargo  = _find_col(df_centro, [_COL_CARGO, "Cargo", "Descripcion Cargo", "Descripción Cargo"])
-    col_planta = _find_col(df_centro, [_COL_PLANTA, "Descripcion Planta", "Descripción Planta"])
-    col_horas  = _find_col(df_centro, [_COL_HORAS, "Número horas", "Numero horas", "Horas"])
-    col_unidad_sirh = _find_col(df_centro, [_COL_UNIDAD2, _COL_UNIDAD, "Unidad Desempeño"])
-
-    def _get(row, col):
-        return _clean_str(row[col]) if col and col in row.index else ""
-
-    rows_tabla = []
-    for _, row in df_centro.iterrows():
-        rut   = _get(row, col_rut)
-        dv    = _get(row, col_dv)
-        nombre= _get(row, col_nombre)
-        horas_c = _safe_float(_get(row, col_horas)) if col_horas else 0.0
-
-        # Unidad de desempeño asignada (session > guardado en DB)
-        ud_actual = st.session_state["rdot_unidad"].get(rut, "")
-        if not ud_actual and col_unidad_sirh:
-            ud_actual = _get(row, col_unidad_sirh)
-
-        # Encargaturas asignadas
-        encargaturas_rut = st.session_state["rdot_asig"].get(rut, [])
-
-        # Calcular horas indirectas
-        hrs_indir = 0.0
-        for encarg in encargaturas_rut:
-            hrs_indir += db_rev.resolver_horas_encargatura(cesfam_sel, encarg)
-
-        hrs_clinicas = max(0.0, horas_c - hrs_indir)
-
-        rows_tabla.append({
-            "RUT":              rut,
-            "DV":               dv,
-            "Nombre":           nombre,
-            "Calidad Jurídica": _get(row, col_calidad),
-            "Cargo":            _get(row, col_cargo) or _get(row, col_planta),
-            "Unidad Desempeño": ud_actual,
-            "Hrs Contrato":     horas_c,
-            "Encargaturas":     len(encargaturas_rut),
-            "Hrs Indirectas":   round(hrs_indir, 2),
-            "Hrs Clínicas":     round(hrs_clinicas, 2),
-            "Obs":              st.session_state["rdot_obs"].get(rut, ""),
-        })
-
-    df_tabla = pd.DataFrame(rows_tabla)
-
-    # ── Semáforo de horas clínicas (color por brecha) ─────────────────────────
-    def _semaforo_html(df: pd.DataFrame) -> str:
-        pal = {
-            "header_bg":  "#1a1a1a",
-            "row_bg":     "#181818",
-            "row_alt":    "#1f1f1f",
-            "border":     "rgba(255,255,255,0.07)",
-            "green":      "#1db954",
-            "yellow":     "#f59e0b",
-            "red":        "#ef4444",
-            "text":       "#ffffff",
-            "text2":      "#b3b3b3",
-        }
-        cols = list(df.columns)
-        th = "".join(
-            f'<th style="padding:8px 10px;text-align:left;font-size:11px;'
-            f'font-weight:600;color:{pal["text2"]};border-bottom:1px solid {pal["border"]};'
-            f'white-space:nowrap;">{c}</th>'
-            for c in cols
+    else:
+        # ── Selectores de período y CESFAM ────────────────────────────────────
+        c1, c2, c3 = st.columns([1, 1, 2])
+        anio_sel = c1.number_input("Año", min_value=2020, max_value=2035,
+                                   value=datetime.datetime.now().year, step=1, key="rv_anio")
+        mes_sel  = c2.selectbox(
+            "Mes", list(range(1, 13)),
+            format_func=lambda m: ["Ene","Feb","Mar","Abr","May","Jun",
+                                    "Jul","Ago","Sep","Oct","Nov","Dic"][m-1],
+            index=datetime.datetime.now().month - 1, key="rv_mes",
         )
-        rows_html = ""
-        for i, (_, r) in enumerate(df.iterrows()):
-            bg = pal["row_alt"] if i % 2 else pal["row_bg"]
-            cells = ""
-            for c in cols:
-                v = r[c]
-                if c == "Hrs Clínicas":
-                    clr = (pal["green"] if float(v) >= 20
-                           else pal["yellow"] if float(v) >= 10
-                           else pal["red"])
-                    cell = (f'<td style="padding:7px 10px;color:{clr};font-weight:700;'
-                            f'font-size:13px;text-align:right;">{v}</td>')
-                elif c == "Hrs Indirectas":
-                    cell = (f'<td style="padding:7px 10px;color:{pal["yellow"]};'
-                            f'font-size:13px;text-align:right;">{v}</td>')
-                elif c in ("Hrs Contrato",):
-                    cell = (f'<td style="padding:7px 10px;color:{pal["text2"]};'
-                            f'font-size:13px;text-align:right;">{v}</td>')
-                else:
-                    cell = (f'<td style="padding:7px 10px;color:{pal["text"]};'
-                            f'font-size:12px;white-space:nowrap;">{v}</td>')
-                cells += cell
-            rows_html += f'<tr style="background:{bg};">{cells}</tr>'
+        mes_anio = _mes_anio_str(int(mes_sel), int(anio_sel))
 
-        return f"""
-        <div style="overflow-x:auto;border-radius:8px;border:1px solid {pal["border"]};">
-        <table style="width:100%;border-collapse:collapse;font-family:Outfit,sans-serif;">
-          <thead><tr style="background:{pal["header_bg"]};">{th}</tr></thead>
-          <tbody>{rows_html}</tbody>
-        </table></div>"""
+        cesfam_list = _list_cesfam_values(df_dot, col_cesfam)
+        cesfam_sel = c3.selectbox("Centro de Salud (Descripción Unidad)", cesfam_list, key="rv_cesfam")
 
-    st.markdown(_semaforo_html(df_tabla), unsafe_allow_html=True)
+        if st.button("🔄 Cambiar Centro / Período", key="rv_reset"):
+            _reset_session_centro()
+            st.rerun()
 
-    st.divider()
+        st.divider()
 
-    # ── Panel de asignación de encargaturas por funcionario ───────────────────
-    st.markdown("#### ⚙️ Asignar Encargaturas")
+        # ── Cargar asignaciones guardadas para este mes/CESFAM ────────────────
+        df_asig_guardadas = db_rev.get_asignaciones(mes_anio)
+        if not df_asig_guardadas.empty:
+            for rut_g, grp in df_asig_guardadas.groupby("rut"):
+                rut_g = str(rut_g)
+                if rut_g not in st.session_state["rdot_asig"]:
+                    st.session_state["rdot_asig"][rut_g] = list(grp["encargatura"])
 
-    ruts_en_tabla = df_tabla["RUT"].tolist()
-    nombres_en_tabla = df_tabla["Nombre"].tolist()
-    rut_opciones = [f"{r} — {n}" for r, n in zip(ruts_en_tabla, nombres_en_tabla)]
+        df_rev_guardada = db_rev.get_revision_mensual(mes_anio, cesfam_sel)
+        if not df_rev_guardada.empty:
+            for _, rg in df_rev_guardada.iterrows():
+                rut_g = str(rg["rut"])
+                if rut_g not in st.session_state["rdot_unidad"]:
+                    st.session_state["rdot_unidad"][rut_g] = str(rg.get("unidad_desempeno", ""))
+                if rut_g not in st.session_state["rdot_obs"]:
+                    st.session_state["rdot_obs"][rut_g] = str(rg.get("observaciones", ""))
 
-    sel_func_str = st.selectbox("Seleccionar funcionario", rut_opciones, key="rv_func_sel")
-    rut_sel = sel_func_str.split(" — ")[0].strip() if sel_func_str else ""
-
-    if rut_sel:
-        row_func = df_tabla[df_tabla["RUT"] == rut_sel].iloc[0]
-        fa, fb, fc = st.columns([2, 2, 2])
-
-        # Unidad de desempeño
-        ud_actual = st.session_state["rdot_unidad"].get(rut_sel, row_func["Unidad Desempeño"])
-        ud_idx = ud_options.index(ud_actual) if ud_actual in ud_options else None
-        ud_nueva = fa.selectbox(
-            "Unidad de Desempeño",
-            ["— Sin asignar —"] + ud_options + ["[Escribir manualmente]"],
-            index=(ud_idx + 1) if ud_idx is not None else 0,
-            key=f"ud_{rut_sel}",
-        )
-        if ud_nueva == "[Escribir manualmente]":
-            ud_manual = fa.text_input("Escribir unidad:", key=f"ud_manual_{rut_sel}")
-            ud_final = ud_manual
-        elif ud_nueva == "— Sin asignar —":
-            ud_final = ""
+        # ── Filtrar dotación para el CESFAM seleccionado ─────────────────────
+        df_centro = _filtrar_por_cesfam(df_dot, col_cesfam, cesfam_sel)
+        if df_centro.empty:
+            st.info(f"No se encontraron funcionarios para **{cesfam_sel}**.")
         else:
-            ud_final = ud_nueva
+            # ── Lista de encargaturas disponibles ──────────────────────────────
+            df_hrs_gen   = db_rev.get_horas_general()
+            df_hrs_csfm  = db_rev.get_horas_cesfam(cesfam_sel)
+            all_encargaturas_gen  = sorted(df_hrs_gen["nombre"].tolist())
+            all_encargaturas_csfm = sorted(df_hrs_csfm["encargatura"].tolist()) if not df_hrs_csfm.empty else []
+            seen = set()
+            all_encargaturas = []
+            for e in all_encargaturas_csfm + all_encargaturas_gen:
+                if e not in seen:
+                    all_encargaturas.append(e)
+                    seen.add(e)
 
-        if ud_final != st.session_state["rdot_unidad"].get(rut_sel, ""):
-            st.session_state["rdot_unidad"][rut_sel] = ud_final
+            # ── Lista de unidades de desempeño disponibles ─────────────────────
+            df_ud = db_rev.get_unidades_desempeno(cesfam_sel)
+            ud_options = sorted(df_ud["unidad_desempeno"].unique().tolist()) if not df_ud.empty else []
 
-        # Encargaturas actuales
-        encargaturas_actuales = st.session_state["rdot_asig"].get(rut_sel, [])
+            st.markdown(f"**{len(df_centro)} funcionarios** encontrados en **{cesfam_sel}** — Período: `{mes_anio}`")
 
-        with fb:
-            st.markdown("**Encargaturas asignadas:**")
-            if encargaturas_actuales:
-                for enc in encargaturas_actuales:
-                    hrs_enc = db_rev.resolver_horas_encargatura(cesfam_sel, enc)
-                    st.markdown(
-                        f'<div style="display:flex;justify-content:space-between;'
-                        f'padding:4px 8px;background:#242424;border-radius:4px;margin:2px 0;">'
-                        f'<span style="font-size:12px;color:#fff;">{enc}</span>'
-                        f'<span style="font-size:12px;color:#f59e0b;font-weight:600;">{hrs_enc:.2f} h</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.caption("Sin encargaturas asignadas.")
+            # ── Construir tabla de trabajo ──────────────────────────────────────
+            col_rut    = _find_col(df_centro, [_COL_RUT, "Rut", "RUT", "rut"])
+            col_dv     = _find_col(df_centro, [_COL_DV, "DV", "dv"])
+            col_nombre = _find_col(df_centro, [_COL_NOMBRE, "Nombre", "NOMBRE"])
+            col_calidad= _find_col(df_centro, [_COL_CALIDAD, "Calidad Jurídica", "Descripcion Calidad Juridica"])
+            col_cargo  = _find_col(df_centro, [_COL_CARGO, "Cargo", "Descripcion Cargo", "Descripción Cargo"])
+            col_planta = _find_col(df_centro, [_COL_PLANTA, "Descripcion Planta", "Descripción Planta"])
+            col_horas  = _find_col(df_centro, [_COL_HORAS, "Número horas", "Numero horas", "Horas"])
+            col_unidad_sirh = _find_col(df_centro, [_COL_UNIDAD2, _COL_UNIDAD, "Unidad Desempeño"])
 
-        with fc:
-            st.markdown("**Agregar encargatura:**")
-            nueva_enc = st.selectbox("", ["— Seleccionar —"] + all_encargaturas,
-                                     key=f"nueva_enc_{rut_sel}", label_visibility="collapsed")
-            if st.button("➕ Agregar", key=f"add_enc_{rut_sel}"):
-                if nueva_enc and nueva_enc != "— Seleccionar —":
-                    lst = st.session_state["rdot_asig"].get(rut_sel, [])
-                    if nueva_enc not in lst:
-                        lst.append(nueva_enc)
-                        st.session_state["rdot_asig"][rut_sel] = lst
-                    st.rerun()
-            if encargaturas_actuales:
-                enc_quitar = st.selectbox("Quitar encargatura:", ["— —"] + encargaturas_actuales,
-                                          key=f"quitar_{rut_sel}")
-                if st.button("➖ Quitar", key=f"rm_enc_{rut_sel}"):
-                    if enc_quitar != "— —":
-                        lst = st.session_state["rdot_asig"].get(rut_sel, [])
-                        if enc_quitar in lst:
-                            lst.remove(enc_quitar)
-                            st.session_state["rdot_asig"][rut_sel] = lst
-                        st.rerun()
+            def _get(row, col):
+                return _clean_str(row[col]) if col and col in row.index else ""
 
-        # Observaciones
-        obs_actual = st.session_state["rdot_obs"].get(rut_sel, "")
-        obs_nueva = st.text_input("Observaciones:", value=obs_actual, key=f"obs_{rut_sel}")
-        st.session_state["rdot_obs"][rut_sel] = obs_nueva
+            rows_tabla = []
+            for _, row in df_centro.iterrows():
+                rut     = _get(row, col_rut)
+                dv      = _get(row, col_dv)
+                nombre  = _get(row, col_nombre)
+                horas_c = _safe_float(_get(row, col_horas)) if col_horas else 0.0
 
-    st.divider()
+                ud_actual = st.session_state["rdot_unidad"].get(rut, "")
+                if not ud_actual and col_unidad_sirh:
+                    ud_actual = _get(row, col_unidad_sirh)
 
-    # ── KPIs rápidos ──────────────────────────────────────────────────────────
-    total_horas_contrato  = df_tabla["Hrs Contrato"].sum()
-    total_horas_indir     = df_tabla["Hrs Indirectas"].sum()
-    total_horas_clin      = df_tabla["Hrs Clínicas"].sum()
-    n_sin_encargatura     = (df_tabla["Encargaturas"] == 0).sum()
-    n_sin_unidad          = (df_tabla["Unidad Desempeño"] == "").sum()
-
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Funcionarios", len(df_tabla))
-    k2.metric("Hrs Contrato total", f"{total_horas_contrato:.1f}")
-    k3.metric("Hrs Indirectas total", f"{total_horas_indir:.1f}")
-    k4.metric("Hrs Clínicas total", f"{total_horas_clin:.1f}")
-    k5.metric("Sin encargatura asignada", n_sin_encargatura)
-
-    st.divider()
-
-    # ── Guardar revisión ──────────────────────────────────────────────────────
-    col_g1, col_g2 = st.columns([3, 1])
-    with col_g2:
-        if st.button("💾 Guardar Revisión Mensual", type="primary", use_container_width=True, key="rv_guardar"):
-            rows_save = []
-            asig_save_all = []
-            for _, row_t in df_centro.iterrows():
-                rut = _get(row_t, col_rut)
-                horas_c = _safe_float(_get(row_t, col_horas)) if col_horas else 0.0
                 encargaturas_rut = st.session_state["rdot_asig"].get(rut, [])
                 hrs_indir = sum(db_rev.resolver_horas_encargatura(cesfam_sel, e) for e in encargaturas_rut)
-                hrs_clin  = max(0.0, horas_c - hrs_indir)
-                ud = st.session_state["rdot_unidad"].get(rut, _get(row_t, col_unidad_sirh) if col_unidad_sirh else "")
-                obs = st.session_state["rdot_obs"].get(rut, "")
+                hrs_clinicas = max(0.0, horas_c - hrs_indir)
 
-                rows_save.append({
-                    "rut":               rut,
-                    "dv":                _get(row_t, col_dv),
-                    "nombre":            _get(row_t, col_nombre),
-                    "cesfam":            cesfam_sel,
-                    "descripcion_unidad":_get(row_t, col_cesfam),
-                    "calidad_juridica":  _get(row_t, col_calidad),
-                    "descripcion_cargo": _get(row_t, col_cargo) or _get(row_t, col_planta),
-                    "descripcion_planta":_get(row_t, col_planta),
-                    "unidad_desempeno":  ud,
-                    "horas_contrato":    horas_c,
-                    "horas_indirectas_total": round(hrs_indir, 2),
-                    "horas_clinicas":    round(hrs_clin, 2),
-                    "observaciones":     obs,
+                rows_tabla.append({
+                    "RUT":              rut,
+                    "DV":               dv,
+                    "Nombre":           nombre,
+                    "Calidad Jurídica": _get(row, col_calidad),
+                    "Cargo":            _get(row, col_cargo) or _get(row, col_planta),
+                    "Unidad Desempeño": ud_actual,
+                    "Hrs Contrato":     horas_c,
+                    "Encargaturas":     len(encargaturas_rut),
+                    "Hrs Indirectas":   round(hrs_indir, 2),
+                    "Hrs Clínicas":     round(hrs_clinicas, 2),
+                    "Obs":              st.session_state["rdot_obs"].get(rut, ""),
                 })
 
-                # Asignaciones individuales
-                for encarg in encargaturas_rut:
-                    hrs_e  = db_rev.resolver_horas_encargatura(cesfam_sel, encarg)
-                    fuente = "CESFAM" if not db_rev.get_horas_cesfam(cesfam_sel).empty and \
-                                        encarg in db_rev.get_horas_cesfam(cesfam_sel)["encargatura"].tolist() else "GENERAL"
-                    asig_save_all.append((rut, _get(row_t, col_nombre), encarg, hrs_e, fuente))
+            df_tabla = pd.DataFrame(rows_tabla)
 
-            try:
-                db_rev.save_revision_mensual(mes_anio, rows_save)
-                # Guardar asignaciones individuales
-                from collections import defaultdict
-                asig_by_rut = defaultdict(list)
-                for rut, nombre, encarg, hrs, fuente in asig_save_all:
-                    asig_by_rut[(rut, nombre)].append((encarg, hrs, fuente))
-                for (rut, nombre), encs in asig_by_rut.items():
-                    db_rev.save_asignaciones_rut(mes_anio, rut, nombre, cesfam_sel, encs)
+            # ── Tabla con semáforo de colores ───────────────────────────────────
+            def _semaforo_html(df):
+                pal = {"hbg":"#1a1a1a","rbg":"#181818","ralt":"#1f1f1f",
+                       "bdr":"rgba(255,255,255,0.07)","grn":"#1db954",
+                       "yel":"#f59e0b","red":"#ef4444","txt":"#ffffff","txt2":"#b3b3b3"}
+                cols = list(df.columns)
+                th = "".join(
+                    f'<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;'
+                    f'color:{pal["txt2"]};border-bottom:1px solid {pal["bdr"]};white-space:nowrap;">{c}</th>'
+                    for c in cols)
+                rows_h = ""
+                for i, (_, r) in enumerate(df.iterrows()):
+                    bg = pal["ralt"] if i % 2 else pal["rbg"]
+                    cells = ""
+                    for c in cols:
+                        v = r[c]
+                        if c == "Hrs Clínicas":
+                            try:
+                                fv = float(v)
+                                clr = pal["grn"] if fv >= 20 else pal["yel"] if fv >= 10 else pal["red"]
+                            except Exception:
+                                clr = pal["txt2"]
+                            cells += (f'<td style="padding:7px 10px;color:{clr};font-weight:700;'
+                                      f'font-size:13px;text-align:right;">{v}</td>')
+                        elif c == "Hrs Indirectas":
+                            cells += (f'<td style="padding:7px 10px;color:{pal["yel"]};'
+                                      f'font-size:13px;text-align:right;">{v}</td>')
+                        elif c == "Hrs Contrato":
+                            cells += (f'<td style="padding:7px 10px;color:{pal["txt2"]};'
+                                      f'font-size:13px;text-align:right;">{v}</td>')
+                        else:
+                            cells += (f'<td style="padding:7px 10px;color:{pal["txt"]};'
+                                      f'font-size:12px;white-space:nowrap;">{v}</td>')
+                    rows_h += f'<tr style="background:{bg};">{cells}</tr>'
+                return (f'<div style="overflow-x:auto;border-radius:8px;border:1px solid {pal["bdr"]};">'
+                        f'<table style="width:100%;border-collapse:collapse;font-family:Outfit,sans-serif;">'
+                        f'<thead><tr style="background:{pal["hbg"]};">{th}</tr></thead>'
+                        f'<tbody>{rows_h}</tbody></table></div>')
 
-                st.success(f"✅ Revisión guardada — {len(rows_save)} funcionarios — {mes_anio}")
-                _load_dotacion.clear()
-            except Exception as e:
-                st.error(f"Error al guardar: {e}")
+            st.markdown(_semaforo_html(df_tabla), unsafe_allow_html=True)
+            st.divider()
 
-    with col_g1:
-        # Descarga directa del estado actual
-        dl_data = pd.DataFrame(rows_tabla)
-        buf = io.BytesIO()
-        dl_data.to_excel(buf, index=False)
-        buf.seek(0)
-        st.download_button(
-            f"📥 Descargar tabla actual ({cesfam_sel})",
-            data=buf,
-            file_name=f"revision_{cesfam_sel}_{mes_anio}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True, key="rv_dl_tabla",
-        )
+            # ── Panel de asignación por funcionario ────────────────────────────
+            st.markdown("#### ⚙️ Asignar Encargaturas")
+            rut_opciones = [f"{r} — {n}" for r, n in zip(df_tabla["RUT"], df_tabla["Nombre"])]
+            sel_func_str = st.selectbox("Seleccionar funcionario", rut_opciones, key="rv_func_sel")
+            rut_sel = sel_func_str.split(" — ")[0].strip() if sel_func_str else ""
+
+            if rut_sel:
+                row_func = df_tabla[df_tabla["RUT"] == rut_sel].iloc[0]
+                fa, fb, fc = st.columns([2, 2, 2])
+
+                ud_actual = st.session_state["rdot_unidad"].get(rut_sel, row_func["Unidad Desempeño"])
+                ud_idx = ud_options.index(ud_actual) if ud_actual in ud_options else None
+                ud_nueva = fa.selectbox(
+                    "Unidad de Desempeño",
+                    ["— Sin asignar —"] + ud_options + ["[Escribir manualmente]"],
+                    index=(ud_idx + 1) if ud_idx is not None else 0,
+                    key=f"ud_{rut_sel}",
+                )
+                if ud_nueva == "[Escribir manualmente]":
+                    ud_final = fa.text_input("Escribir unidad:", key=f"ud_manual_{rut_sel}")
+                elif ud_nueva == "— Sin asignar —":
+                    ud_final = ""
+                else:
+                    ud_final = ud_nueva
+                if ud_final != st.session_state["rdot_unidad"].get(rut_sel, ""):
+                    st.session_state["rdot_unidad"][rut_sel] = ud_final
+
+                encargaturas_actuales = st.session_state["rdot_asig"].get(rut_sel, [])
+
+                with fb:
+                    st.markdown("**Encargaturas asignadas:**")
+                    if encargaturas_actuales:
+                        for enc in encargaturas_actuales:
+                            hrs_enc = db_rev.resolver_horas_encargatura(cesfam_sel, enc)
+                            st.markdown(
+                                f'<div style="display:flex;justify-content:space-between;'
+                                f'padding:4px 8px;background:#242424;border-radius:4px;margin:2px 0;">'
+                                f'<span style="font-size:12px;color:#fff;">{enc}</span>'
+                                f'<span style="font-size:12px;color:#f59e0b;font-weight:600;">{hrs_enc:.2f} h</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    else:
+                        st.caption("Sin encargaturas asignadas.")
+
+                with fc:
+                    st.markdown("**Agregar encargatura:**")
+                    nueva_enc = st.selectbox("", ["— Seleccionar —"] + all_encargaturas,
+                                             key=f"nueva_enc_{rut_sel}", label_visibility="collapsed")
+                    if st.button("➕ Agregar", key=f"add_enc_{rut_sel}"):
+                        if nueva_enc and nueva_enc != "— Seleccionar —":
+                            lst = st.session_state["rdot_asig"].get(rut_sel, [])
+                            if nueva_enc not in lst:
+                                lst.append(nueva_enc)
+                                st.session_state["rdot_asig"][rut_sel] = lst
+                            st.rerun()
+                    if encargaturas_actuales:
+                        enc_quitar = st.selectbox("Quitar:", ["— —"] + encargaturas_actuales,
+                                                  key=f"quitar_{rut_sel}")
+                        if st.button("➖ Quitar", key=f"rm_enc_{rut_sel}"):
+                            if enc_quitar != "— —":
+                                lst = st.session_state["rdot_asig"].get(rut_sel, [])
+                                if enc_quitar in lst:
+                                    lst.remove(enc_quitar)
+                                    st.session_state["rdot_asig"][rut_sel] = lst
+                                st.rerun()
+
+                obs_actual = st.session_state["rdot_obs"].get(rut_sel, "")
+                obs_nueva = st.text_input("Observaciones:", value=obs_actual, key=f"obs_{rut_sel}")
+                st.session_state["rdot_obs"][rut_sel] = obs_nueva
+
+            st.divider()
+
+            # ── KPIs ───────────────────────────────────────────────────────────
+            k1, k2, k3, k4, k5 = st.columns(5)
+            k1.metric("Funcionarios", len(df_tabla))
+            k2.metric("Hrs Contrato total", f"{df_tabla['Hrs Contrato'].sum():.1f}")
+            k3.metric("Hrs Indirectas total", f"{df_tabla['Hrs Indirectas'].sum():.1f}")
+            k4.metric("Hrs Clínicas total", f"{df_tabla['Hrs Clínicas'].sum():.1f}")
+            k5.metric("Sin encargatura", int((df_tabla["Encargaturas"] == 0).sum()))
+
+            st.divider()
+
+            # ── Guardar revisión ───────────────────────────────────────────────
+            col_g1, col_g2 = st.columns([3, 1])
+            with col_g2:
+                if st.button("💾 Guardar Revisión Mensual", type="primary",
+                             use_container_width=True, key="rv_guardar"):
+                    rows_save = []
+                    asig_save_all = []
+                    for _, row_t in df_centro.iterrows():
+                        rut = _get(row_t, col_rut)
+                        horas_c = _safe_float(_get(row_t, col_horas)) if col_horas else 0.0
+                        encargaturas_rut = st.session_state["rdot_asig"].get(rut, [])
+                        hrs_indir = sum(db_rev.resolver_horas_encargatura(cesfam_sel, e) for e in encargaturas_rut)
+                        hrs_clin  = max(0.0, horas_c - hrs_indir)
+                        ud  = st.session_state["rdot_unidad"].get(
+                            rut, _get(row_t, col_unidad_sirh) if col_unidad_sirh else "")
+                        obs = st.session_state["rdot_obs"].get(rut, "")
+                        rows_save.append({
+                            "rut": rut, "dv": _get(row_t, col_dv),
+                            "nombre": _get(row_t, col_nombre), "cesfam": cesfam_sel,
+                            "descripcion_unidad": _get(row_t, col_cesfam),
+                            "calidad_juridica": _get(row_t, col_calidad),
+                            "descripcion_cargo": _get(row_t, col_cargo) or _get(row_t, col_planta),
+                            "descripcion_planta": _get(row_t, col_planta),
+                            "unidad_desempeno": ud, "horas_contrato": horas_c,
+                            "horas_indirectas_total": round(hrs_indir, 2),
+                            "horas_clinicas": round(hrs_clin, 2), "observaciones": obs,
+                        })
+                        for encarg in encargaturas_rut:
+                            hrs_e  = db_rev.resolver_horas_encargatura(cesfam_sel, encarg)
+                            fuente = "CESFAM" if (not df_hrs_csfm.empty and
+                                      encarg in df_hrs_csfm["encargatura"].tolist()) else "GENERAL"
+                            asig_save_all.append((rut, _get(row_t, col_nombre), encarg, hrs_e, fuente))
+                    try:
+                        db_rev.save_revision_mensual(mes_anio, rows_save)
+                        from collections import defaultdict
+                        asig_by_rut = defaultdict(list)
+                        for rut_s, nom_s, encarg_s, hrs_s, fuente_s in asig_save_all:
+                            asig_by_rut[(rut_s, nom_s)].append((encarg_s, hrs_s, fuente_s))
+                        for (rut_s, nom_s), encs in asig_by_rut.items():
+                            db_rev.save_asignaciones_rut(mes_anio, rut_s, nom_s, cesfam_sel, encs)
+                        st.success(f"✅ Revisión guardada — {len(rows_save)} funcionarios — {mes_anio}")
+                        _load_dotacion.clear()
+                    except Exception as e:
+                        st.error(f"Error al guardar: {e}")
+
+            with col_g1:
+                buf = io.BytesIO()
+                pd.DataFrame(rows_tabla).to_excel(buf, index=False)
+                buf.seek(0)
+                st.download_button(
+                    f"📥 Descargar tabla actual ({cesfam_sel})",
+                    data=buf,
+                    file_name=f"revision_{cesfam_sel}_{mes_anio}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="rv_dl_tabla",
+                )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
