@@ -539,6 +539,64 @@ with img2:
     st.page_link("pages/7_Dotacion.py", label="Abrir Dotación →", use_container_width=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("<hr>", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 5 — REVISIÓN DE DOTACIÓN POR CENTRO
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="section-hdr">
+  <span class="sec-num">05</span>
+  <span class="sec-title">Revisión de Dotación por Centro</span>
+  <span class="sec-sub">Horas clínicas · Horas indirectas · Brecha vs ideal · Repositorio mensual</span>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="ev-main">', unsafe_allow_html=True)
+
+rev_col1, rev_col2 = st.columns([2, 1], gap="medium")
+
+with rev_col1:
+    st.markdown(
+        '<div class="module-card module-card-top" style="--accent:#1a6bb5;min-height:320px;">'
+        '<div style="font-size:1.9rem;">🏥</div>'
+        '<div class="module-title">Revisión Dotación por Centro de Salud</div>'
+        '<div style="display:flex;gap:.2rem;flex-wrap:wrap;">'
+        '<span class="module-tag">Por CESFAM</span>'
+        '<span class="module-tag">Horas Indirectas</span>'
+        '<span class="module-tag">Horas Clínicas</span>'
+        '<span class="module-tag">Repositorio Mensual</span>'
+        '<span class="module-tag">Brecha vs Ideal</span>'
+        '<span class="module-tag">Unidad Desempeño</span>'
+        '</div>'
+        '<div class="module-desc">'
+        'Permite seleccionar un centro de salud y revisar la dotación de funcionarios. '
+        'Asigna encargaturas a cada persona, descuenta horas indirectas (generales y por CESFAM) '
+        'y calcula las horas clínicas disponibles. Guarda el resultado en un repositorio '
+        'mensual estable y calcula la brecha vs dotación ideal.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.page_link("pages/8_Rev_Dotacion_Centro.py", label="Abrir Revisión Dotación →", use_container_width=True)
+
+with rev_col2:
+    st.markdown(
+        '<div class="module-card" style="--accent:#f59e0b;min-height:320px;">'
+        '<div style="font-size:1.9rem;">📋</div>'
+        '<div class="module-title">Funcionalidades</div>'
+        '<div class="module-desc" style="font-size:12px;">'
+        '<b>Vista por Centro:</b> Selecciona CESFAM y mes, visualiza staff, asigna encargaturas y unidades de desempeño.<br><br>'
+        '<b>Horas Indirectas:</b> Lista editable general + matriz específica por CESFAM.<br><br>'
+        '<b>Repositorio:</b> Revisiones mensuales persistentes, descargables en Excel.<br><br>'
+        '<b>Dotación Ideal:</b> Matriz de dotación ideal por cargo/CESFAM importable.<br><br>'
+        '<b>Brecha:</b> Comparación dotación real vs ideal con semáforo de alerta.'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
