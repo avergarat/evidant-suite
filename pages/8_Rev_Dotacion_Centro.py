@@ -5,6 +5,7 @@ Repositorio mensual · Asignación de horas indirectas · Cálculo de horas clí
 """
 
 import sys, os, io, re, sqlite3, datetime
+from typing import Optional
 import streamlit as st
 import pandas as pd
 
@@ -76,7 +77,7 @@ def _norm_col(col: str) -> str:
     return re.sub(r"[^a-z0-9]", "_", str(col).lower()).strip("_")
 
 
-def _find_col(df: pd.DataFrame, candidates: list) -> str | None:
+def _find_col(df: pd.DataFrame, candidates: list) -> Optional[str]:
     """Retorna el primer nombre de columna que existe en df."""
     for c in candidates:
         if c in df.columns:
